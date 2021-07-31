@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include "matrix.h"
+#include "ffcnn.h"
 
 MATRIX* matrix_create(int rows, int cols)
 {
@@ -11,7 +11,7 @@ MATRIX* matrix_create(int rows, int cols)
     }
     matrix->rows = rows;
     matrix->cols = cols;
-    matrix->data = (double*)((uint8_t*)matrix + sizeof(MATRIX));
+    matrix->data = (float*)((char*)matrix + sizeof(MATRIX));
     return matrix;
 }
 
@@ -35,13 +35,13 @@ void matrix_multiply(MATRIX *mr, MATRIX *m1, MATRIX *m2)
     }
 }
 
-void matrix_add(MATRIX *mr, MATRIX *m1, MATRIX *m2)
+void matrix_add(MATRIX *m1, MATRIX *m2)
 {
     int n = m1->rows * m1->cols, i;
     for (i=0; i<n; i++) m1->data[i] += m2->data[i];
 }
 
-void matrix_sub(MATRIX *mr, MATRIX *m1, MATRIX *m2)
+void matrix_sub(MATRIX *m1, MATRIX *m2)
 {
     int n = m1->rows * m1->cols, i;
     for (i=0; i<n; i++) m1->data[i] -= m2->data[i];
@@ -63,31 +63,31 @@ void matrix_upsample(MATRIX *m1, MATRIX *m2, int stride)
     }
 }
 
-float filter_conv(MATRIX *m, int x, int y, MATRIX *f)
+static float filter_conv(MATRIX *m, int x, int y, FILTER *f)
 {
     float val = 0;
     int   i, j;
     for (j=0; j<f->rows; j++) {
         for (i=0; i<f->cols; i++) {
-            val += m->data[(y + j) * m->cols + x + i)] * f->data[j * f->cols + i];
+            val += m->data[(y + j) * m->cols + x + i] * f->data[j * f->cols + i];
         }
     }
     return val;
 }
 
-float filter_avg(MATRIX *m, int x, int y, int w, int h)
+static float filter_avg(MATRIX *m, int x, int y, int w, int h)
 {
     float val = 0;
     int   i, j;
     for (j=0; j<h; j++) {
         for (i=0; i<w; i++) {
-            val += m->data[(y + j) * m->cols + x + i)];
+            val += m->data[(y + j) * m->cols + x + i];
         }
     }
     return val / (w * h);
 }
 
-float filter_max(MATRIX *m, int x, int y, int w, int h)
+static float filter_max(MATRIX *m, int x, int y, int w, int h)
 {
     float val = m->data[y * m->cols + x];
     int   i, j;
@@ -99,3 +99,26 @@ float filter_max(MATRIX *m, int x, int y, int w, int h)
     return val;
 }
 
+float filter(MATRIX *m, int x, int y, FILTER *f)
+{
+    switch (f->type) {
+    case FILTER_TYPE_CONV: filter_conv(m, x, y, f);
+    case FILTER_TYPE_AVG : filter_avg (m, x, y, f->cols, f->rows);
+    case FILTER_TYPE_MAX : filter_max (m, x, y, f->cols, f->rows);
+    default: return 0;
+    }
+}
+
+float activate(float x, int type)
+{
+    switch (type) {
+    case ACTIVATE_TYPE_RELU  : return x > 0 ? x : 0;
+    case ACTIVATE_TYPE_LEAKY : return x > 0 ? x : 0.1f * x;
+    default: return x;
+    }
+}
+
+int main(void)
+{
+    return;
+}
