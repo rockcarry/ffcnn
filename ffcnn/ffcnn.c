@@ -1,21 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "ffcnn.h"
-
-MATRIX* matrix_create(int rows, int cols)
-{
-    MATRIX *matrix = malloc(sizeof(MATRIX) + rows * cols * sizeof(float));
-    if (!matrix) {
-        printf("matrix_create: failed to allocate memory !\n");
-        return NULL;
-    }
-    matrix->rows = rows;
-    matrix->cols = cols;
-    matrix->data = (float*)((char*)matrix + sizeof(MATRIX));
-    return matrix;
-}
-
-void matrix_destroy(MATRIX *m) { free(m); }
 
 void matrix_multiply(MATRIX *mr, MATRIX *m1, MATRIX *m2)
 {
@@ -35,30 +21,30 @@ void matrix_multiply(MATRIX *mr, MATRIX *m1, MATRIX *m2)
     }
 }
 
-void matrix_add(MATRIX *m1, MATRIX *m2)
+void matrix_add(MATRIX *mr, MATRIX *m1, MATRIX *m2)
 {
-    int n = m1->rows * m1->cols, i;
-    for (i=0; i<n; i++) m1->data[i] += m2->data[i];
+    int n = mr->rows * mr->cols, i;
+    for (i=0; i<n; i++) mr->data[i] = m1->data[i] + m2->data[i];
 }
 
-void matrix_sub(MATRIX *m1, MATRIX *m2)
+void matrix_sub(MATRIX *mr, MATRIX *m1, MATRIX *m2)
 {
-    int n = m1->rows * m1->cols, i;
-    for (i=0; i<n; i++) m1->data[i] -= m2->data[i];
+    int n = mr->rows * mr->cols, i;
+    for (i=0; i<n; i++) mr->data[i] = m1->data[i] - m2->data[i];
 }
 
-void matrix_scale(MATRIX *m1, float s)
+void matrix_scale(MATRIX *mr, MATRIX *m1, float s)
 {
-    int n = m1->rows * m1->cols, i;
-    for (i=0; i<n; i++) m1->data[i] *= s;
+    int n = mr->rows * mr->cols, i;
+    for (i=0; i<n; i++) mr->data[i] = m1->data[i] * s;
 }
 
-void matrix_upsample(MATRIX *m1, MATRIX *m2, int stride)
+void matrix_upsample(MATRIX *mr, MATRIX *m1, int stride)
 {
     int i, j;
-    for (j=0; j<m1->rows; j++) {
-        for (i=0; i<m1->cols; i++) {
-            m1->data[j * m1->cols + i] = m2->data[(j / stride) * m2->cols + i / stride];
+    for (j=0; j<mr->rows; j++) {
+        for (i=0; i<mr->cols; i++) {
+            m1->data[j * mr->cols + i] = m1->data[(j / stride) * m1->cols + i / stride];
         }
     }
 }
@@ -118,7 +104,83 @@ float activate(float x, int type)
     }
 }
 
+static void layer_filter_forward(LAYER *ilayer, LAYER *olayer)
+{
+    MATRIX *im, *om; FILTER *flt;
+    int     in, on, iw, ih, fw, fh, fs, ix, iy, ox, oy, i, j, px, py;
+    float   val;
+    in = ilayer->matrix_num;
+    on = olayer->matrix_num;
+    iw = ilayer->matrix_list[0].cols;
+    ih = ilayer->matrix_list[0].rows;
+    fw = ilayer->filter_list[0].cols;
+    fh = ilayer->filter_list[0].cols;
+    fs = ilayer->stride;
+    px = olayer->pad ? olayer->filter_list[0].cols / 2 : 0;
+    py = olayer->pad ? olayer->filter_list[0].rows / 2 : 0;
+    for (iy=0,oy=py; iy+fh<ih; iy+=fs,oy++) {
+        for (ix=0,ox=px; ix+fw<iw; ix+=fs,ox++) {
+            for (j=0; j<on; j++) {
+                om = ilayer->matrix_list + j;
+                for (i=0; i<in; i++) {
+                    im  = ilayer->matrix_list + i;
+                    flt = ilayer->filter_list + j * in + i;
+                    val = filter(im, ix, iy, flt);
+                    if (!i) om->data[oy * om->cols + ox] = val + ilayer->fbias_list[j];
+                    else    om->data[oy * om->cols + ox]+= val;
+                    if (i == in - 1) om->data[oy * om->cols + ox] = activate(om->data[oy * om->cols + ox], ilayer->activate);
+                }
+            }
+        }
+    }
+}
+
+static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
+{
+    int i; for (i=0; i<ilayer->matrix_num; i++) matrix_upsample(olayer->matrix_list + i, ilayer->matrix_list + i, ilayer->stride);
+}
+
+static void layer_shortcut_forward(LAYER *ilayer, LAYER *olayer)
+{
+    LAYER *slayer = ilayer + ilayer->lshortcut;
+    int  i, j, n = olayer->matrix_list[0].cols * olayer->matrix_list[0].rows;
+    for (i=0; i<olayer->matrix_num; i++) {
+        float *po = olayer->matrix_list[i].data;
+        float *pi = ilayer->matrix_list[i].data;
+        float *ps = slayer->matrix_list[i].data;
+        for (j=0; j<n; j++) {
+            *po = *pi + *ps;
+            *po = activate(*po, ilayer->activate);
+             pi++, ps++, po++;
+        }
+    }
+}
+
+static void layer_route_forward(LAYER *ilayer, LAYER *olayer)
+{
+    int  i, j, k = 0;
+    for (i=0; i<ilayer->route_num; i++) {
+        LAYER *rlayer = ilayer + ilayer->route_list[i];
+        for (j=0; j<rlayer->matrix_num; j++) {
+            memcpy(olayer->matrix_list[k].data, rlayer->matrix_list[j].data, olayer->matrix_list[k].cols * olayer->matrix_list[k].rows * sizeof(float)); k++;
+        }
+    }
+}
+
+void layer_forward(LAYER *ilayer, LAYER *olayer)
+{
+    switch (ilayer->type) {
+    case LAYER_TYPE_CONV   :
+    case LAYER_TYPE_MAXPOOL:
+    case LAYER_TYPE_AVGPOOL:
+        layer_filter_forward(ilayer, olayer); break;
+    case LAYER_TYPE_UPSAMPLE: layer_upsample_forward(ilayer, olayer); break;
+    case LAYER_TYPE_SHORTCUT: layer_shortcut_forward(ilayer, olayer); break;
+    case LAYER_TYPE_ROUTE   : layer_route_forward   (ilayer, olayer); break;
+    }
+}
+
 int main(void)
 {
-    return;
+    return 0;
 }

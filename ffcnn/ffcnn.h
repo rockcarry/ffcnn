@@ -9,13 +9,11 @@ typedef struct {
     MATRIX_COMMON_MEMBERS
 } MATRIX;
 
-MATRIX* matrix_create  (int rows, int cols);
-void    matrix_destroy (MATRIX *m);
-void    matrix_multiply(MATRIX *mr, MATRIX *m1, MATRIX *m2);
-void    matrix_add     (MATRIX *m1, MATRIX *m2);
-void    matrix_sub     (MATRIX *m1, MATRIX *m2);
-void    matrix_scale   (MATRIX *m1, float s);
-void    matrix_upsample(MATRIX *m1, MATRIX *m2, int stride);
+void matrix_multiply(MATRIX *mr, MATRIX *m1, MATRIX *m2);
+void matrix_add     (MATRIX *mr, MATRIX *m1, MATRIX *m2);
+void matrix_sub     (MATRIX *mr, MATRIX *m1, MATRIX *m2);
+void matrix_scale   (MATRIX *mr, MATRIX *m1, float s);
+void matrix_upsample(MATRIX *mr, MATRIX *m1, int stride);
 
 enum {
     FILTER_TYPE_CONV,
@@ -26,7 +24,6 @@ enum {
 typedef struct {
     MATRIX_COMMON_MEMBERS
     int    type;
-    float  bias;
 } FILTER;
 float filter(MATRIX *m, int x, int y, FILTER *f);
 
@@ -49,19 +46,30 @@ enum {
 
 typedef struct {
     int     type;
+    int     refcnt;
     MATRIX *matrix_list;
     int     matrix_num ;
     FILTER *filter_list;
     int     filter_num ;
+    float  *fbias_list ;
+    int     fbias_num  ;
+    int     stride, pad;
+    int     activate ;
+    int     batchnorm;
+    int     lshortcut;
+    int     route_list[4];
+    int     route_num;
 } LAYER;
-void layer_forward(LAYER *layercur, LAYER *layernext);
+
+void layer_forward(LAYER *ilaye, LAYER *olayer);
 
 typedef struct {
     LAYER *layer_list;
     int    layer_num ;
 } NET;
+
 NET* net_load   (char *file1, char *file2);
-void net_free   (NET  *net );
-void net_forward(NET  *net );
+void net_free   (NET *net);
+void net_forward(NET *net);
 
 #endif
