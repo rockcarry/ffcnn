@@ -13,7 +13,7 @@ enum {
 };
 typedef struct {
     int    type, width, height, channels, n;
-    float *data, bias;
+    float *data, *bias;
 } FILTER;
 
 enum {
