@@ -115,7 +115,7 @@ NET* net_load(char *file1, char *file2)
 {
     char *cfgstr = load_file_to_buffer(file1), *pstart, *pend, strval[256];
     NET  *net    = NULL;
-    int   layers, layercur = 0, i, j;
+    int   layers, layercur = 0, i;
     if (!cfgstr) return NULL;
 
     layers = get_total_layers(cfgstr);
@@ -201,11 +201,6 @@ NET* net_load(char *file1, char *file2)
                 filter->data = pfloat; pfloat += filter->width * filter->height * filter->channels * filter->n;
                 filter->bias = pfloat; pfloat += filter->n;
             }
-            if (net->layer_list[i].depend_num > 0) {
-                for (j=0; j<net->layer_list[i].depend_num; j++) {
-                    net->layer_list[net->layer_list[i].depend_list[j] + 1].refcnt++;
-                }
-            }
         }
     }
     return net;
@@ -215,7 +210,12 @@ void net_free(NET *net)
 {
     int  i;
     if (!net) return;
-    for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].matrix.data);
+    for (i=0; i<net->layer_num+1; i++) {
+        if (net->layer_list[i].matrix.data) {
+            printf("net_free, free matrix memory for layer %d\n", i);
+            free(net->layer_list[i].matrix.data);
+        }
+    }
     free(net->weight_buf);
     free(net);
 }
@@ -228,16 +228,10 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     if (!net) return;
 
     mat = &(net->layer_list[0].matrix);
-    if (mat->channels != 3) {
-        printf("invalid input matrix channels: %d !\n", mat->channels);
-        return;
-    }
+    if (mat->channels != 3) { printf("invalid input matrix channels: %d !\n", mat->channels); return; }
 
     if (!mat->data) mat->data = malloc(mat->width * mat->height * mat->channels * sizeof(float));
-    if (!mat->data) {
-        printf("failed to allocate memory for net input !\n");
-        return;
-    }
+    if (!mat->data) { printf("failed to allocate memory for net input !\n"); return; }
 
     if (w * mat->height > h * mat->width) {
         sw    = mat->width;
@@ -266,10 +260,40 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             p3[i * mat->width + j] = (b - mean[2]) * norm[2];
         }
     }
+
+    for (i=0; i<net->layer_num; i++) {
+        if (net->layer_list[i].depend_num > 0) {
+            for (j=0; j<net->layer_list[i].depend_num; j++) {
+                net->layer_list[net->layer_list[i].depend_list[j] + 1].refcnt++;
+            }
+        }
+    }
 }
 
 void net_forward(NET *net)
 {
+    LAYER *ilayer, *olayer;
+    int  i, j;
+    if (!net) return;
+    for (i=0; i<net->layer_num; i++) {
+        ilayer = net->layer_list + i + 0;
+        olayer = net->layer_list + i + 1;
+        if (!olayer->matrix.data) olayer->matrix.data = malloc(olayer->matrix.width * olayer->matrix.height * olayer->matrix.channels * sizeof(float));
+        if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
+
+        layer_forward(ilayer, olayer);
+
+        if (ilayer->refcnt == 0) {
+            free(ilayer->matrix.data);
+            ilayer->matrix.data = NULL;
+        }
+        for (j=0; j<ilayer->depend_num; j++) {
+            if (--net->layer_list[ilayer->depend_list[j] + 1].refcnt == 0) {
+                free(net->layer_list[ilayer->depend_list[j] + 1].matrix.data);
+                net->layer_list[ilayer->depend_list[j] + 1].matrix.data = NULL;
+            }
+        }
+    }
 }
 
 void net_dump(NET *net)
@@ -311,7 +335,7 @@ int main(int argc, char *argv[])
     char  bgr[640 * 480 * 3];
     float MEAN[3] = { 0.0f, 0.0f, 0.0f };
     float NORM[3] = { 1/255.f, 1/255.f, 1/255.f };
-    NET  *net  = NULL;
+    NET  *net = NULL;
 
     if (argc > 1) file_cfg    = argv[1];
     if (argc > 2) file_weight = argv[2];
