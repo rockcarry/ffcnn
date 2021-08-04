@@ -115,7 +115,7 @@ NET* net_load(char *file1, char *file2)
 {
     char *cfgstr = load_file_to_string(file1), *pstart, *pend, strval[256];
     NET  *net    = NULL;
-    int   layers, layercur = 0, i;
+    int   layers, layercur = 0, i, j;
     if (!cfgstr) return NULL;
 
     layers = get_total_layers(cfgstr);
@@ -195,12 +195,16 @@ NET* net_load(char *file1, char *file2)
     net->weight_buf = malloc(net->weight_size * sizeof(float));
     if (net->weight_buf) {
         float  *pfloat = net->weight_buf;
-        FILTER *filter;
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == FILTER_TYPE_CONV) {
-                filter = &net->layer_list[i].filter;
+                FILTER *filter = &net->layer_list[i].filter;
                 filter->data = pfloat; pfloat += filter->width * filter->height * filter->channels * filter->n;
                 filter->bias = pfloat; pfloat += filter->n;
+            }
+            if (net->layer_list[i].depend_num > 0) {
+                for (j=0; j<net->layer_list[i].depend_num; j++) {
+                    net->layer_list[net->layer_list[i].depend_list[j] + 1].refcnt++;
+                }
             }
         }
     }
@@ -209,15 +213,66 @@ NET* net_load(char *file1, char *file2)
 
 void net_free(NET *net)
 {
+    int  i;
     if (!net) return;
+    for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].matrix.data);
     free(net->weight_buf);
     free(net);
+}
+
+void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm)
+{
+    MATRIX *mat = NULL;
+    int    sw, sh, s1, s2, i, j;
+    float  *p1, *p2, *p3;
+    if (!net) return;
+
+    mat = &(net->layer_list[0].matrix);
+    if (mat->channels != 3) {
+        printf("invalid input matrix channels: %d !\n", mat->channels);
+        return;
+    }
+
+    if (!mat->data) mat->data = malloc(mat->width * mat->height * mat->channels * sizeof(float));
+    if (!mat->data) {
+        printf("failed to allocate memory for net input !\n");
+        return;
+    }
+
+    if (w * mat->height > h * mat->width) {
+        sw    = mat->width;
+        sh    = mat->width * h / w;
+        s1    = w;
+        s2    = sw;
+    } else {
+        sh = mat->height;
+        sw = mat->height* w / h;
+        s1 = h;
+        s2 = sh;
+    }
+    p1 = mat->data;
+    p2 = mat->data + 1 * mat->width * mat->height;
+    p3 = mat->data + 2 * mat->width * mat->height;
+    for (i=0; i<sh; i++) {
+        for (j=0; j<sw; j++) {
+            int x, y, r, g, b;
+            x = j * s1 / s2;
+            y = i * s1 / s2;
+            b = bgr[y * w * 3 + x * 3 + 0];
+            g = bgr[y * w * 3 + x * 3 + 1];
+            r = bgr[y * w * 3 + x * 3 + 2];
+            p1[i * mat->width + j] = (b - mean[0]) * norm[0];
+            p2[i * mat->width + j] = (b - mean[1]) * norm[1];
+            p3[i * mat->width + j] = (b - mean[2]) * norm[2];
+        }
+    }
 }
 
 void net_dump(NET *net)
 {
     int i, j;
-    printf("layer   type  filters fltsize  pad/strd input          output       bn/act\n");
+    if (!net) return;
+    printf("layer   type  filters fltsize  pad/strd input          output       bn/act  ref\n");
     for (i=0; i<net->layer_num; i++) {
         if (net->layer_list[i].type == LAYER_TYPE_YOLO) {
             printf("%3d %8s\n", i, get_layer_type_string(net->layer_list[i].type));
@@ -230,16 +285,16 @@ void net_dump(NET *net)
                 snprintf(strnum, sizeof(strnum), " %d", net->layer_list[i].depend_list[j]);
                 strncat(strdeps, strnum, sizeof(strdeps) - 1);
             }
-            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(net->layer_list[i].type), strdeps,
-                net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels);
+            printf("%3d %8s %-38s -> %3dx%3dx%3d           %d\n", i, get_layer_type_string(net->layer_list[i].type), strdeps,
+                net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels, net->layer_list[i].refcnt);
         } else {
-            printf("%3d %8s %3d/%3d %2dx%2dx%3d   %d/%2d   %3dx%3dx%3d -> %3dx%3dx%3d  %d/%s\n", i,
+            printf("%3d %8s %3d/%3d %2dx%2dx%3d   %d/%2d   %3dx%3dx%3d -> %3dx%3dx%3d  %d/%-6s %d\n", i,
                 get_layer_type_string(net->layer_list[i].type), net->layer_list[i].filter.n, net->layer_list[i].groups,
                 net->layer_list[i].filter.width, net->layer_list[i].filter.height, net->layer_list[i].filter.channels,
                 net->layer_list[i].pad, net->layer_list[i].stride,
                 net->layer_list[i+0].matrix.width, net->layer_list[i+0].matrix.height, net->layer_list[i+0].matrix.channels,
                 net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels,
-                net->layer_list[i].batchnorm, get_activation_type_string(net->layer_list[i].activate));
+                net->layer_list[i].batchnorm, get_activation_type_string(net->layer_list[i].activate), net->layer_list[i].refcnt);
         }
     }
     printf("total weights: %d floats, %d bytes\n", net->weight_size, net->weight_size * sizeof(float));
@@ -249,12 +304,16 @@ int main(int argc, char *argv[])
 {
     char *file_cfg    = "yolo-fastest-1.1.cfg";
     char *file_weight = "yolo-fastest-1.1.weight";
+    char  bgr[640 * 480 * 3];
+    float MEAN[3] = { 0.0f, 0.0f, 0.0f };
+    float NORM[3] = { 1/255.f, 1/255.f, 1/255.f };
     NET  *net  = NULL;
 
     if (argc > 1) file_cfg    = argv[1];
     if (argc > 2) file_weight = argv[2];
 
     net = net_load(file_cfg, file_weight);
+    net_input(net, bgr, 640, 480, MEAN, NORM);
     net_dump(net);
     net_free(net);
     getch();

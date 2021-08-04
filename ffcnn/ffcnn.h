@@ -12,7 +12,7 @@ enum {
     FILTER_TYPE_MAX ,
 };
 typedef struct {
-    int    type, width, height, channels, n;
+    int    width, height, channels, n;
     float *data, *bias;
 } FILTER;
 
@@ -53,6 +53,7 @@ typedef struct {
 } NET;
 NET* net_load   (char *file1, char *file2);
 void net_free   (NET *net);
+void net_input  (NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm);
 void net_forward(NET *net);
 void net_dump   (NET *net);
 
