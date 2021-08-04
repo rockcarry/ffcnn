@@ -22,7 +22,7 @@ void layer_forward(LAYER *ilayer, LAYER *olayer)
 {
 }
 
-static char* load_file_to_string(char *file)
+static char* load_file_to_buffer(char *file)
 {
     FILE *fp = fopen(file, "rb");
     char *buf= NULL;
@@ -113,7 +113,7 @@ static void calculate_output_whc(LAYER *in, LAYER *out)
 
 NET* net_load(char *file1, char *file2)
 {
-    char *cfgstr = load_file_to_string(file1), *pstart, *pend, strval[256];
+    char *cfgstr = load_file_to_buffer(file1), *pstart, *pend, strval[256];
     NET  *net    = NULL;
     int   layers, layercur = 0, i, j;
     if (!cfgstr) return NULL;
@@ -133,11 +133,11 @@ NET* net_load(char *file1, char *file2)
             parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].matrix.height  = atoi(strval);
             parse_params(pstart, pend, "channels", strval, sizeof(strval)); net->layer_list[0].matrix.channels= atoi(strval);
         } else if (strstr(pstart, "[conv]") == pstart || strstr(pstart, "[convolutional]") == pstart) {
-            parse_params(pstart, pend, "filters", strval, sizeof(strval)); net->layer_list[layercur].filter.n = atoi(strval);
-            parse_params(pstart, pend, "size"   , strval, sizeof(strval)); net->layer_list[layercur].filter.width = net->layer_list[layercur].filter.height = atoi(strval);
-            parse_params(pstart, pend, "stride" , strval, sizeof(strval)); net->layer_list[layercur].stride = atoi(strval);
-            parse_params(pstart, pend, "pad"    , strval, sizeof(strval)); net->layer_list[layercur].pad    = atoi(strval);
-            parse_params(pstart, pend, "groups" , strval, sizeof(strval)); net->layer_list[layercur].groups = atoi(strval);
+            parse_params(pstart, pend, "filters" , strval, sizeof(strval)); net->layer_list[layercur].filter.n = atoi(strval);
+            parse_params(pstart, pend, "size"    , strval, sizeof(strval)); net->layer_list[layercur].filter.width = net->layer_list[layercur].filter.height = atoi(strval);
+            parse_params(pstart, pend, "stride"  , strval, sizeof(strval)); net->layer_list[layercur].stride = atoi(strval);
+            parse_params(pstart, pend, "pad"     , strval, sizeof(strval)); net->layer_list[layercur].pad    = atoi(strval);
+            parse_params(pstart, pend, "groups"  , strval, sizeof(strval)); net->layer_list[layercur].groups = atoi(strval);
             parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); net->layer_list[layercur].batchnorm = atoi(strval);
             parse_params(pstart, pend, "activation"     , strval, sizeof(strval)); net->layer_list[layercur].activate  = get_activation_type_int(strval);
             if (net->layer_list[layercur].stride== 0) net->layer_list[layercur].stride= 1;
@@ -268,6 +268,10 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     }
 }
 
+void net_forward(NET *net)
+{
+}
+
 void net_dump(NET *net)
 {
     int i, j;
@@ -313,9 +317,10 @@ int main(int argc, char *argv[])
     if (argc > 2) file_weight = argv[2];
 
     net = net_load(file_cfg, file_weight);
-    net_input(net, bgr, 640, 480, MEAN, NORM);
-    net_dump(net);
-    net_free(net);
+    net_input  (net, bgr, 640, 480, MEAN, NORM);
+    net_forward(net);
+    net_dump   (net);
+    net_free   (net);
     getch();
     return 0;
 }
