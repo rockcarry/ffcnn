@@ -223,14 +223,16 @@ void net_free(NET *net)
 void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm)
 {
     MATRIX *mat = NULL;
-    int    sw, sh, s1, s2, i, j;
+    int    padw, padh, sw, sh, s1, s2, i, j;
     float  *p1, *p2, *p3;
     if (!net) return;
 
+    padw= net->layer_list[0].pad ? net->layer_list[0].filter.width / 2 : 0;
+    padh= net->layer_list[0].pad ? net->layer_list[0].filter.height/ 2 : 0;
     mat = &(net->layer_list[0].matrix);
     if (mat->channels != 3) { printf("invalid input matrix channels: %d !\n", mat->channels); return; }
 
-    if (!mat->data) mat->data = malloc(mat->width * mat->height * mat->channels * sizeof(float));
+    if (!mat->data) mat->data = malloc((mat->width + padw * 2) * (mat->height + padh * 2) * mat->channels * sizeof(float));
     if (!mat->data) { printf("failed to allocate memory for net input !\n"); return; }
 
     if (w * mat->height > h * mat->width) {
@@ -255,9 +257,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             b = bgr[y * w * 3 + x * 3 + 0];
             g = bgr[y * w * 3 + x * 3 + 1];
             r = bgr[y * w * 3 + x * 3 + 2];
-            p1[i * mat->width + j] = (b - mean[0]) * norm[0];
-            p2[i * mat->width + j] = (b - mean[1]) * norm[1];
-            p3[i * mat->width + j] = (b - mean[2]) * norm[2];
+            p1[(i + padh) * mat->width + j + padw] = (b - mean[0]) * norm[0];
+            p2[(i + padh) * mat->width + j + padw] = (b - mean[1]) * norm[1];
+            p3[(i + padh) * mat->width + j + padw] = (b - mean[2]) * norm[2];
         }
     }
 
@@ -278,8 +280,12 @@ void net_forward(NET *net)
     for (i=0; i<net->layer_num; i++) {
         ilayer = net->layer_list + i + 0;
         olayer = net->layer_list + i + 1;
-        if (!olayer->matrix.data) olayer->matrix.data = malloc(olayer->matrix.width * olayer->matrix.height * olayer->matrix.channels * sizeof(float));
-        if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
+        if (!olayer->matrix.data && olayer->type != LAYER_TYPE_DROPOUT) {
+            int padw = ilayer->pad ? ilayer->filter.width / 2 : 0;
+            int padh = ilayer->pad ? ilayer->filter.height/ 2 : 0;
+            olayer->matrix.data = malloc((olayer->matrix.width + padw * 2) * (olayer->matrix.height + padh * 2) * olayer->matrix.channels * sizeof(float));
+            if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
+        }
 
         layer_forward(ilayer, olayer);
 
