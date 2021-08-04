@@ -2,7 +2,7 @@
 #define _FFCNN_H_
 
 typedef struct {
-    int    width, height, channels;
+    int    width, height, channels, padw, padh;
     float *data;
 } MATRIX;
 

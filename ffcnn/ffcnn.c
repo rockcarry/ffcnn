@@ -18,6 +18,30 @@ float activate(float x, int type)
     }
 }
 
+void matrix_upsample_2d(MATRIX *mr, MATRIX *m1, int stride)
+{
+    int  i, j;
+    for (j=0; j<mr->height; j++) {
+        for (i=0; i<mr->width; i++) {
+            m1->data[(mr->padh + j) * (mr->width + mr->padw * 2) + i] = m1->data[((mr->padh + j) / stride) * (m1->width + m1->padw * 2) + i / stride];
+        }
+    }
+}
+
+static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
+{
+    int  i;
+    MATRIX imat = ilayer->matrix, omat = olayer->matrix;
+    for (i=0; i<ilayer->matrix.channels; i++) {
+        matrix_upsample_2d(&omat, &imat, ilayer->stride);
+        imat.data += (imat.height + imat.padh * 2) * (imat.width + imat.padw * 2);
+    }
+}
+
+static void layer_shortcut_forward(LAYER *ilayer, LAYER *olayer)
+{
+}
+
 void layer_forward(LAYER *ilayer, LAYER *olayer)
 {
 }
@@ -103,12 +127,11 @@ static char* get_layer_type_string(int type)
 
 static void calculate_output_whc(LAYER *in, LAYER *out)
 {
-    int padw, padh;
-    padw = in->pad ? in->filter.width / 2 : 0;
-    padh = in->pad ? in->filter.height/ 2 : 0;
+    in ->matrix.padw     = in->pad ? in->filter.width / 2 : 0;
+    in ->matrix.padh     = in->pad ? in->filter.height/ 2 : 0;
     out->matrix.channels =  in->filter.n;
-    out->matrix.width    = (in->matrix.width - in->filter.width + padw * 2) / in->stride + 1;
-    out->matrix.height   = (in->matrix.height- in->filter.height+ padh * 2) / in->stride + 1;
+    out->matrix.width    = (in->matrix.width - in->filter.width + in->matrix.padw * 2) / in->stride + 1;
+    out->matrix.height   = (in->matrix.height- in->filter.height+ in->matrix.padh * 2) / in->stride + 1;
 }
 
 NET* net_load(char *file1, char *file2)
@@ -223,16 +246,16 @@ void net_free(NET *net)
 void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm)
 {
     MATRIX *mat = NULL;
-    int    padw, padh, sw, sh, s1, s2, i, j;
+    int    sw, sh, s1, s2, i, j;
     float  *p1, *p2, *p3;
     if (!net) return;
 
-    padw= net->layer_list[0].pad ? net->layer_list[0].filter.width / 2 : 0;
-    padh= net->layer_list[0].pad ? net->layer_list[0].filter.height/ 2 : 0;
     mat = &(net->layer_list[0].matrix);
+    mat->padw= net->layer_list[0].pad ? net->layer_list[0].filter.width / 2 : 0;
+    mat->padh= net->layer_list[0].pad ? net->layer_list[0].filter.height/ 2 : 0;
     if (mat->channels != 3) { printf("invalid input matrix channels: %d !\n", mat->channels); return; }
 
-    if (!mat->data) mat->data = malloc((mat->width + padw * 2) * (mat->height + padh * 2) * mat->channels * sizeof(float));
+    if (!mat->data) mat->data = malloc((mat->width + mat->padw * 2) * (mat->height + mat->padh * 2) * mat->channels * sizeof(float));
     if (!mat->data) { printf("failed to allocate memory for net input !\n"); return; }
 
     if (w * mat->height > h * mat->width) {
@@ -257,9 +280,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             b = bgr[y * w * 3 + x * 3 + 0];
             g = bgr[y * w * 3 + x * 3 + 1];
             r = bgr[y * w * 3 + x * 3 + 2];
-            p1[(padh + i) * (mat->width + padw * 2) + padw + j] = (b - mean[0]) * norm[0];
-            p2[(padh + i) * (mat->width + padw * 2) + padw + j] = (b - mean[1]) * norm[1];
-            p3[(padh + i) * (mat->width + padw * 2) + padw + j] = (b - mean[2]) * norm[2];
+            p1[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[0]) * norm[0];
+            p2[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[1]) * norm[1];
+            p3[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[2]) * norm[2];
         }
     }
 
@@ -281,9 +304,7 @@ void net_forward(NET *net)
         ilayer = net->layer_list + i + 0;
         olayer = net->layer_list + i + 1;
         if (!olayer->matrix.data && olayer->type != LAYER_TYPE_DROPOUT) {
-            int padw = ilayer->pad ? ilayer->filter.width / 2 : 0;
-            int padh = ilayer->pad ? ilayer->filter.height/ 2 : 0;
-            olayer->matrix.data = malloc((olayer->matrix.width + padw * 2) * (olayer->matrix.height + padh * 2) * olayer->matrix.channels * sizeof(float));
+            olayer->matrix.data = malloc((olayer->matrix.width + olayer->matrix.padw * 2) * (olayer->matrix.height + olayer->matrix.padh * 2) * olayer->matrix.channels * sizeof(float));
             if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
         }
 
