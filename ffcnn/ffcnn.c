@@ -236,10 +236,10 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     if (!mat->data) { printf("failed to allocate memory for net input !\n"); return; }
 
     if (w * mat->height > h * mat->width) {
-        sw    = mat->width;
-        sh    = mat->width * h / w;
-        s1    = w;
-        s2    = sw;
+        sw = mat->width;
+        sh = mat->width * h / w;
+        s1 = w;
+        s2 = sw;
     } else {
         sh = mat->height;
         sw = mat->height* w / h;
@@ -257,9 +257,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             b = bgr[y * w * 3 + x * 3 + 0];
             g = bgr[y * w * 3 + x * 3 + 1];
             r = bgr[y * w * 3 + x * 3 + 2];
-            p1[(i + padh) * mat->width + j + padw] = (b - mean[0]) * norm[0];
-            p2[(i + padh) * mat->width + j + padw] = (b - mean[1]) * norm[1];
-            p3[(i + padh) * mat->width + j + padw] = (b - mean[2]) * norm[2];
+            p1[(padh + i) * (mat->width + padw * 2) + padw + j] = (b - mean[0]) * norm[0];
+            p2[(padh + i) * (mat->width + padw * 2) + padw + j] = (b - mean[1]) * norm[1];
+            p3[(padh + i) * (mat->width + padw * 2) + padw + j] = (b - mean[2]) * norm[2];
         }
     }
 
