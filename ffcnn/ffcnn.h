@@ -6,11 +6,6 @@ typedef struct {
     float *data;
 } MATRIX;
 
-enum {
-    FILTER_TYPE_CONV,
-    FILTER_TYPE_AVG ,
-    FILTER_TYPE_MAX ,
-};
 typedef struct {
     int    width, height, channels, n;
     float *data, *bias;
@@ -43,7 +38,7 @@ typedef struct {
     int     depend_list[4];
     int     depend_num;
 } LAYER;
-void layer_forward(LAYER *ilaye, LAYER *olayer);
+void layer_forward(LAYER *head, LAYER *ilaye, LAYER *olayer);
 
 typedef struct {
     LAYER *layer_list;
