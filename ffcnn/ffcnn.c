@@ -2,12 +2,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <float.h>
+#include <math.h>
 #include <conio.h>
 #include "ffcnn.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable:4996)
 #define snprintf _snprintf
+typedef int                int32_t;
+typedef unsigned long long uint64_t;
+#else
+#include <stdint.h>
 #endif
 
 enum {
@@ -318,9 +323,18 @@ static void calculate_output_whc(LAYER *in, LAYER *out)
     out->matrix.height   = (in->matrix.height- in->filter.height+ in->matrix.padh * 2) / in->stride + 1;
 }
 
-NET* net_load(char *file1, char *file2)
+#pragma pack(1)
+typedef struct {
+    int32_t  ver_major;
+    int32_t  ver_minor;
+    int32_t  ver_revision;
+    uint64_t net_seen;
+} WEIGHTS_FILE_HEADER;
+#pragma pack()
+
+NET* net_load(char *file_cfg, char *file_weights)
 {
-    char *cfgstr = load_file_to_buffer(file1), *pstart, *pend, strval[256];
+    char *cfgstr = load_file_to_buffer(file_cfg), *pstart, *pend, strval[256];
     NET  *net    = NULL;
     int   layers, layercur = 0, i;
     if (!cfgstr) return NULL;
@@ -399,9 +413,9 @@ NET* net_load(char *file1, char *file2)
     }
     free(cfgstr);
 
-    net->weight_buf = malloc(net->weight_size * sizeof(float));
+    net->weight_buf = malloc(sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float));
     if (net->weight_buf) {
-        float *pfloat = net->weight_buf;
+        float *pfloat = net->weight_buf + sizeof(WEIGHTS_FILE_HEADER); FILE *fp;
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 FILTER *filter = &net->layer_list[i].filter;
@@ -414,6 +428,7 @@ NET* net_load(char *file1, char *file2)
                 filter->data = pfloat; pfloat += filter->width * filter->height * filter->channels * filter->n;
             }
         }
+        if ((fp = fopen(file_weights, "rb"))) { fread(net->weight_buf, 1, sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float), fp); fclose(fp); }
     }
     return net;
 }
@@ -542,7 +557,7 @@ void net_dump(NET *net)
                 net->layer_list[i].batchnorm, get_activation_type_string(net->layer_list[i].activate), net->layer_list[i].refcnt);
         }
     }
-    printf("total weights: %d floats, %d bytes\n", net->weight_size, net->weight_size * sizeof(float));
+    printf("total weights: %d, total bytes: %d\n", net->weight_size, sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float));
 }
 
 int main(int argc, char *argv[])
