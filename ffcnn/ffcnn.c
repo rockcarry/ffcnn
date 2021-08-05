@@ -38,9 +38,108 @@ static void matrix_fill_pad(MATRIX *mat, float val)
     }
 }
 
-static void layer_filter_forward(LAYER *ilayer, LAYER *olayer)
+static float filter_conv(float *mat, int mw, int x, int y, float *flt, int fw, int fh)
 {
-    // todo..
+    float val = 0;
+    int   i, j;
+    for (j=0; j<fh; j++) {
+        for (i=0; i<fw; i++) {
+            val += mat[(y + j) * mw + x + i] * flt[j * fw + i];
+        }
+    }
+    return val;
+}
+
+static float filter_avgmax(float *mat, int mw, int x, int y, int fw, int fh, int flag)
+{
+    float val = 0, max = mat[y * mw + x];
+    int   i, j;
+    for (j=0; j<fh; j++) {
+        for (i=0; i<fw; i++) {
+            if (flag) {
+                if (max < mat[(y + j) * mw + x + i]) max = mat[(y + j) * mw + x + i];
+            } else {
+                val += mat[(y + j) * mw + x + i];
+            }
+        }
+    }
+    return flag ? max : val / (fw * fh);
+}
+
+static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
+{
+    int  n, i, ix, iy, ox, oy, fw, fh, fs, mwi, mwo;
+    float *datai, *datao, *dataf;
+    fw  = ilayer->filter.width;
+    fh  = ilayer->filter.height;
+    fs  = ilayer->stride;
+    mwi = ilayer->matrix.width + ilayer->matrix.padw * 2;
+    mwo = olayer->matrix.width + olayer->matrix.padw * 2;
+
+    datao = olayer->matrix.data + olayer->matrix.padh * mwo + olayer->matrix.padw;
+    dataf = ilayer->filter.data;
+    for (n=0; n<olayer->matrix.channels; n++) {
+        datai = ilayer->matrix.data;
+        for (i=0; i<ilayer->matrix.channels; i++) {
+            for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
+                for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
+                    float val = filter_conv(datai, mwi, ix, iy, dataf, fw, fh);
+                    if (!i) datao[oy * mwo + ox] = val + ilayer->filter.bias[n];
+                    else    datao[oy * mwo + ox]+= val;
+                    if (i == ilayer->matrix.channels - 1) {
+                        if (!ilayer->batchnorm) datao[oy * mwo + ox] = activate(datao[oy * mwo + ox], ilayer->activate);
+                    }
+                }
+            }
+            datai += (ilayer->matrix.height + ilayer->matrix.padh * 2) * mwi;
+            dataf += fw * fh;
+        }
+        datao += (olayer->matrix.height + olayer->matrix.padh * 2) * mwo;
+    }
+}
+
+static void layer_groupconv_forward(LAYER *ilayer, LAYER *olayer)
+{
+    LAYER tilayer, tolayer;
+    int   i;
+    tilayer.activate         = ilayer->activate ;
+    tilayer.batchnorm        = ilayer->batchnorm;
+    tilayer.filter           = ilayer->filter;
+    tilayer.matrix           = ilayer->matrix;
+    tilayer.stride           = ilayer->stride;
+    tilayer.matrix.channels /= ilayer->groups;
+    tilayer.filter.n        /= ilayer->groups;
+    tolayer.matrix           = olayer->matrix;
+    tolayer.matrix.channels /= ilayer->groups;
+    for (i=0; i<ilayer->groups; i++) {
+        layer_convolution_forward(&tilayer, &tolayer);
+        tolayer.matrix.data += (tolayer.matrix.width + tolayer.matrix.padw * 2) * (tolayer.matrix.height + tolayer.matrix.padh * 2) * tilayer.filter.n;
+        tilayer.matrix.data += (tilayer.matrix.width + tilayer.matrix.padw * 2) * (tilayer.matrix.height + tilayer.matrix.padh * 2) * tilayer.matrix.channels;
+        tilayer.filter.data +=  tilayer.filter.width * tilayer.filter.height * tilayer.filter.channels * tilayer.filter.n;
+    }
+}
+
+static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
+{
+    int  n, ix, iy, ox, oy, fw, fh, fs, mwi, mwo;
+    float *datai, *datao;
+    fw  = ilayer->filter.width;
+    fh  = ilayer->filter.height;
+    fs  = ilayer->stride;
+    mwi = ilayer->matrix.width + ilayer->matrix.padw * 2;
+    mwo = olayer->matrix.width + olayer->matrix.padw * 2;
+
+    datai = ilayer->matrix.data;
+    datao = olayer->matrix.data + olayer->matrix.padh * mwo + olayer->matrix.padw;
+    for (n=0; n<olayer->matrix.channels; n++) {
+        for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
+            for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
+                datao[oy * mwo + ox] = activate(filter_avgmax(datai, mwi, ix, iy, fw, fh, flag), ilayer->activate);
+            }
+        }
+        datai += (ilayer->matrix.height + ilayer->matrix.padh * 2) * mwi;
+        datao += (olayer->matrix.height + olayer->matrix.padh * 2) * mwo;
+    }
 }
 
 static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
@@ -110,14 +209,13 @@ static void layer_route_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 {
     switch (ilayer->type) {
-    case LAYER_TYPE_CONV   :
-    case LAYER_TYPE_MAXPOOL:
-    case LAYER_TYPE_AVGPOOL:
-        layer_filter_forward(ilayer, olayer); break;
-    case LAYER_TYPE_UPSAMPLE: layer_upsample_forward(ilayer, olayer); break;
-    case LAYER_TYPE_DROPOUT : layer_dropout_forward (ilayer, olayer); break;
-    case LAYER_TYPE_SHORTCUT: layer_shortcut_forward(head, ilayer, olayer); break;
-    case LAYER_TYPE_ROUTE   : layer_route_forward   (head, ilayer, olayer); break;
+    case LAYER_TYPE_CONV    : layer_groupconv_forward (ilayer, olayer);       break;
+    case LAYER_TYPE_AVGPOOL : layer_avgmaxpool_forward(ilayer, olayer, 0);    break;
+    case LAYER_TYPE_MAXPOOL : layer_avgmaxpool_forward(ilayer, olayer, 1);    break;
+    case LAYER_TYPE_UPSAMPLE: layer_upsample_forward  (ilayer, olayer);       break;
+    case LAYER_TYPE_DROPOUT : layer_dropout_forward   (ilayer, olayer);       break;
+    case LAYER_TYPE_SHORTCUT: layer_shortcut_forward  (head, ilayer, olayer); break;
+    case LAYER_TYPE_ROUTE   : layer_route_forward     (head, ilayer, olayer); break;
     }
 }
 
