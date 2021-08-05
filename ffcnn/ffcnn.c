@@ -92,7 +92,19 @@ static void layer_shortcut_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 
 static void layer_route_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 {
-    // todo...
+    int    mwo   = olayer->matrix.width + olayer->matrix.padw * 2;
+    float *datao = olayer->matrix.data + olayer->matrix.padh * mwo + olayer->matrix.padw;
+    int  i, j, k;
+    for (i=0; i<ilayer->depend_num; i++) {
+        LAYER *rlayer = head + ilayer->depend_list[i] + 1;
+        int    mwr    = rlayer->matrix.width + rlayer->matrix.padw * 2;
+        float *datar  = rlayer->matrix.data + rlayer->matrix.padh * mwr + rlayer->matrix.padw;
+        for (j=0; j<rlayer->matrix.channels; j++) {
+            for (k=0; k<rlayer->matrix.height; k++) memcpy(datao + k * mwo, datar + k * mwr, olayer->matrix.width * sizeof(float));
+            datao += mwo * (olayer->matrix.height + olayer->matrix.padh * 2);
+            datar += mwr * (rlayer->matrix.height + rlayer->matrix.padh * 2);
+        }
+    }
 }
 
 void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
