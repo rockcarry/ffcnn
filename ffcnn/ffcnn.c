@@ -90,10 +90,15 @@ static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
             for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
                 for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
                     float val = filter_conv(datai, mwi, ix, iy, dataf, fw, fh);
-                    if (!i) datao[oy * mwo + ox] = val + ilayer->filter.bias[n];
+                    if (!i) datao[oy * mwo + ox] = val;
                     else    datao[oy * mwo + ox]+= val;
                     if (i == ilayer->matrix.channels - 1) {
-                        if (!ilayer->batchnorm) datao[oy * mwo + ox] = activate(datao[oy * mwo + ox], ilayer->activate);
+                        if (ilayer->batchnorm) {
+                            datao[oy * mwo + ox] = (datao[oy * mwo + ox] - ilayer->filter.rolling_mean[n])/(float)sqrt(ilayer->filter.rolling_variance[n] + 0.00001f);
+                            datao[oy * mwo + ox]*= ilayer->filter.scale[n];
+                        }
+                        datao[oy * mwo + ox]+= ilayer->filter.bias [n];
+                        datao[oy * mwo + ox] = activate(datao[oy * mwo + ox], ilayer->activate);
                     }
                 }
             }
@@ -346,7 +351,7 @@ NET* net_load(char *file1, char *file2)
             if (net->layer_list[layercur].groups== 0) net->layer_list[layercur].groups= 1;
             net->layer_list[layercur].filter.channels = net->layer_list[layercur].matrix.channels / net->layer_list[layercur].groups;
             net->weight_size += net->layer_list[layercur].filter.width * net->layer_list[layercur].filter.height * net->layer_list[layercur].filter.channels * net->layer_list[layercur].filter.n;
-            net->weight_size += net->layer_list[layercur].filter.n;
+            net->weight_size += net->layer_list[layercur].filter.n * (1 + !!net->layer_list[layercur].batchnorm * 3);
             net->layer_list[layercur++].type = LAYER_TYPE_CONV;
             calculate_output_whc(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
@@ -400,8 +405,13 @@ NET* net_load(char *file1, char *file2)
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 FILTER *filter = &net->layer_list[i].filter;
-                filter->data = pfloat; pfloat += filter->width * filter->height * filter->channels * filter->n;
                 filter->bias = pfloat; pfloat += filter->n;
+                if (net->layer_list[i].batchnorm) {
+                    filter->scale            = pfloat; pfloat += filter->n;
+                    filter->rolling_mean     = pfloat; pfloat += filter->n;
+                    filter->rolling_variance = pfloat; pfloat += filter->n;
+                }
+                filter->data = pfloat; pfloat += filter->width * filter->height * filter->channels * filter->n;
             }
         }
     }
