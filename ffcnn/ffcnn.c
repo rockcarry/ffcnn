@@ -489,14 +489,6 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             p3[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[2]) * norm[2];
         }
     }
-
-    for (i=0; i<net->layer_num; i++) {
-        if (net->layer_list[i].depend_num > 0) {
-            for (j=0; j<net->layer_list[i].depend_num; j++) {
-                net->layer_list[net->layer_list[i].depend_list[j] + 1].refcnt++;
-            }
-        }
-    }
 }
 
 void net_forward(NET *net)
@@ -504,6 +496,13 @@ void net_forward(NET *net)
     LAYER *ilayer, *olayer;
     int  i, j;
     if (!net) return;
+    for (i=0; i<net->layer_num; i++) {
+        if (net->layer_list[i].depend_num > 0) {
+            for (j=0; j<net->layer_list[i].depend_num; j++) {
+                net->layer_list[net->layer_list[i].depend_list[j] + 1].refcnt++;
+            }
+        }
+    }
     for (i=0; i<net->layer_num; i++) {
         ilayer = net->layer_list + i + 0;
         olayer = net->layer_list + i + 1;
@@ -515,7 +514,7 @@ void net_forward(NET *net)
 
         layer_forward(net->layer_list, ilayer, olayer);
 
-        if (ilayer->refcnt == 0) {
+        if (i > 0 && ilayer->refcnt == 0) {
             free(ilayer->matrix.data);
             ilayer->matrix.data = NULL;
         }
