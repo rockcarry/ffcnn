@@ -12,13 +12,6 @@ typedef struct {
 } FILTER;
 
 enum {
-    ACTIVATE_TYPE_LINEAR,
-    ACTIVATE_TYPE_RELU  ,
-    ACTIVATE_TYPE_LEAKY ,
-};
-float activate(float x, int type);
-
-enum {
     LAYER_TYPE_CONV    ,
     LAYER_TYPE_AVGPOOL ,
     LAYER_TYPE_MAXPOOL ,
@@ -38,7 +31,6 @@ typedef struct {
     int     depend_list[4];
     int     depend_num;
 } LAYER;
-void layer_forward(LAYER *head, LAYER *ilaye, LAYER *olayer);
 
 typedef struct {
     LAYER *layer_list;
@@ -46,6 +38,7 @@ typedef struct {
     int    weight_size;
     float *weight_buf;
 } NET;
+
 NET* net_load   (char *file1, char *file2);
 void net_free   (NET *net);
 void net_input  (NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm);

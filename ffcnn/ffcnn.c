@@ -10,7 +10,13 @@
 #define snprintf _snprintf
 #endif
 
-float activate(float x, int type)
+enum {
+    ACTIVATE_TYPE_LINEAR,
+    ACTIVATE_TYPE_RELU  ,
+    ACTIVATE_TYPE_LEAKY ,
+};
+
+static float activate(float x, int type)
 {
     switch (type) {
     case ACTIVATE_TYPE_RELU : return x > 0 ? x : 0;
@@ -206,7 +212,7 @@ static void layer_route_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
     }
 }
 
-void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
+static void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 {
     switch (ilayer->type) {
     case LAYER_TYPE_CONV    : layer_groupconv_forward (ilayer, olayer);       break;
@@ -390,7 +396,7 @@ NET* net_load(char *file1, char *file2)
 
     net->weight_buf = malloc(net->weight_size * sizeof(float));
     if (net->weight_buf) {
-        float  *pfloat = net->weight_buf;
+        float *pfloat = net->weight_buf;
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 FILTER *filter = &net->layer_list[i].filter;
