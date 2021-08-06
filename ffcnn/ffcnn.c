@@ -19,13 +19,15 @@ enum {
     ACTIVATE_TYPE_LINEAR,
     ACTIVATE_TYPE_RELU  ,
     ACTIVATE_TYPE_LEAKY ,
+    ACTIVATE_TYPE_SIGMOID,
 };
 
 static float activate(float x, int type)
 {
     switch (type) {
-    case ACTIVATE_TYPE_RELU : return x > 0 ? x : 0;
-    case ACTIVATE_TYPE_LEAKY: return x > 0 ? x : 0.1f * x;
+    case ACTIVATE_TYPE_RELU   : return x > 0 ? x : 0;
+    case ACTIVATE_TYPE_LEAKY  : return x > 0 ? x : 0.1f * x;
+    case ACTIVATE_TYPE_SIGMOID: return (float)(1.0f / (1.0f + exp(-x)));
     default: return x;
     }
 }
@@ -222,19 +224,46 @@ static void layer_route_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
     }
 }
 
+static float get_matrix_data(MATRIX *mat, int w, int h, int c)
+{
+    int mw = mat->width  + mat->padw * 2;
+    int mh = mat->height + mat->padh * 2;
+    return mat->data[c * mw * mh + h * mw + w];
+}
+
 static void layer_yolo_forward(LAYER *ilayer, LAYER *olayer)
 {
-    int i, j, k;
-    printf("%d %d %d\n", ilayer->matrix.width, ilayer->matrix.height, ilayer->matrix.channels);
+    int i, j, k, l;
     for (i=0; i<ilayer->matrix.height; i++) {
         for (j=0; j<ilayer->matrix.width; j++) {
-            int    channel = 0;
-            float *score   = NULL;
             for (k=0; k<3; k++) {
-                channel = k * (4 + 1 + 80) + 4;
-                score   = ilayer->matrix.data + channel * (ilayer->matrix.width + ilayer->matrix.padw * 2) * (ilayer->matrix.height + ilayer->matrix.padh * 2);
-                score  += (i + ilayer->matrix.padh) * (ilayer->matrix.width + ilayer->matrix.padw * 2) + j + ilayer->matrix.padw;
-                printf("(%2d, %2d) %6.2f %6.2f %6.2f %6.2f %6.2f\n", j, i, score[-4], score[-3], score[-2], score[-1], score[0]);
+                int cstart = k * (4 + 1 + 80);
+                float tx = get_matrix_data(&ilayer->matrix, j, i, cstart + 0);
+                float ty = get_matrix_data(&ilayer->matrix, j, i, cstart + 1);
+                float tw = get_matrix_data(&ilayer->matrix, j, i, cstart + 2);
+                float th = get_matrix_data(&ilayer->matrix, j, i, cstart + 3);
+                float bs = get_matrix_data(&ilayer->matrix, j, i, cstart + 4);
+                float cs = get_matrix_data(&ilayer->matrix, j, i, cstart + 5);
+                int class_index = 0;
+                for (l=1; l<80; l++) {
+                    float ts = get_matrix_data(&ilayer->matrix, j, i, cstart + 5 + l);
+                    if (cs < ts) { cs = ts; class_index = l; }
+                }
+                if (1) {
+                    float confidence = (float)(1.0f / ((1.0f + exp(-bs) * (1.0f + exp(-cs)))));
+                    if (confidence >= ilayer->ignore_thres) {
+                        float bias_w = 1, bias_h = 1, net_w = 1, net_h = 1; // todo...
+                        float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) / ilayer->matrix.width ;
+                        float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) / ilayer->matrix.height;
+                        float bbox_w    = (float)(exp(tw) * bias_w / net_w);
+                        float bbox_h    = (float)(exp(th) * bias_h / net_h);
+                        float bbox_xmin = bbox_cx - bbox_w * 0.5f;
+                        float bbox_ymin = bbox_cy - bbox_h * 0.5f;
+                        float bbox_xmax = bbox_cx + bbox_w * 0.5f;
+                        float bbox_ymax = bbox_cy + bbox_h * 0.5f;
+                        printf("%d %5.2f, bbox_xmin: %5.2f, bbox_ymin: %5.2f, bbox_xmax: %5.2f, bbox_ymax: %5.2f\n", class_index, confidence, bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax);
+                    }
+                }
             }
         }
     }
@@ -413,19 +442,36 @@ NET* net_load(char *file_cfg, char *file_weights)
             net->layer_list[layercur].matrix.width    = net->layer_list[layercur - 1].matrix.width;
             net->layer_list[layercur].matrix.height   = net->layer_list[layercur - 1].matrix.height;
         } else if (strstr(pstart, "[route]") == pstart) {
-            char *str; int n = 0, dep = 0;
+            char *str; int dep = 0;
             parse_params(pstart, pend, "layers", strval, sizeof(strval));
-            while (n < 4 && (str = strtok(n ? NULL : strval, ","))) {
+            for (i=0; i<4 && (str = strtok(i ? NULL : strval, ",")); i++) {
                 dep = atoi(str);
                 dep = dep > 0 ? dep : layercur + dep;
-                net->layer_list[layercur + 0].depend_list[n++] = dep;
+                net->layer_list[layercur + 0].depend_list[i]   = dep;
                 net->layer_list[layercur + 1].matrix.channels += net->layer_list[dep + 1].matrix.channels;
                 net->layer_list[layercur + 1].matrix.width     = net->layer_list[dep + 1].matrix.width;
                 net->layer_list[layercur + 1].matrix.height    = net->layer_list[dep + 1].matrix.height;
             }
-            net->layer_list[layercur].depend_num = n;
+            net->layer_list[layercur].depend_num = i;
             net->layer_list[layercur++].type = LAYER_TYPE_ROUTE;
         } else if (strstr(pstart, "[yolo]") == pstart) {
+            char *str; int masks[9]; int anchors[9][2];
+            parse_params(pstart, pend, "classes"      , strval, sizeof(strval)); net->layer_list[layercur].class_num   = (int  )atoi(strval);
+            parse_params(pstart, pend, "scale_x_y"    , strval, sizeof(strval)); net->layer_list[layercur].scale_x_y   = (float)atof(strval);
+            parse_params(pstart, pend, "ignore_thresh", strval, sizeof(strval)); net->layer_list[layercur].ignore_thres= (float)atof(strval);
+            parse_params(pstart, pend, "mask", strval, sizeof(strval));
+            for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) masks[i] = atoi(str);
+            net->layer_list[layercur].anchor_num = i;
+            parse_params(pstart, pend, "anchors", strval, sizeof(strval));
+            for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) {
+                anchors[i][0] = atoi(str);
+                str = strtok(NULL, ",");
+                anchors[i][1] = atoi(str);
+            }
+            for (i=0; i<net->layer_list[layercur].anchor_num; i++) {
+                net->layer_list[layercur].anchor_list[i][0] = anchors[masks[i]][0];
+                net->layer_list[layercur].anchor_list[i][1] = anchors[masks[i]][1];
+            }
             net->layer_list[layercur++].type = LAYER_TYPE_YOLO;
         }
         pstart = pend;

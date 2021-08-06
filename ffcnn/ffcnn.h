@@ -30,6 +30,12 @@ typedef struct {
     int     batchnorm, activate;
     int     depend_list[4];
     int     depend_num;
+
+    int     class_num;
+    int     anchor_num;
+    int     anchor_list[9][2];
+    float   scale_x_y;
+    float   ignore_thres;
 } LAYER;
 
 typedef struct {
