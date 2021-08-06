@@ -102,7 +102,7 @@ static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
                             datao[oy * mwo + ox] = (datao[oy * mwo + ox] - ilayer->filter.rolling_mean[n])/(float)sqrt(ilayer->filter.rolling_variance[n] + 0.00001f);
                             datao[oy * mwo + ox]*= ilayer->filter.scale[n];
                         }
-                        datao[oy * mwo + ox]+= ilayer->filter.bias [n];
+                        datao[oy * mwo + ox]+= ilayer->filter.bias[n];
                         datao[oy * mwo + ox] = activate(datao[oy * mwo + ox], ilayer->activate);
                     }
                 }
@@ -234,7 +234,7 @@ static void layer_yolo_forward(LAYER *ilayer, LAYER *olayer)
                 channel = k * (4 + 1 + 80) + 4;
                 score   = ilayer->matrix.data + channel * (ilayer->matrix.width + ilayer->matrix.padw * 2) * (ilayer->matrix.height + ilayer->matrix.padh * 2);
                 score  += (i + ilayer->matrix.padh) * (ilayer->matrix.width + ilayer->matrix.padw * 2) + j + ilayer->matrix.padw;
-                printf("(%2d, %2d) %f %f %f %f %f\n", j, i, score[-4], score[-3], score[-2], score[-1], score[0]);
+                printf("(%2d, %2d) %6.2f %6.2f %6.2f %6.2f %6.2f\n", j, i, score[-4], score[-3], score[-2], score[-1], score[0]);
             }
         }
     }
@@ -434,7 +434,7 @@ NET* net_load(char *file_cfg, char *file_weights)
 
     net->weight_buf = malloc(sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float));
     if (net->weight_buf) {
-        float *pfloat = net->weight_buf + sizeof(WEIGHTS_FILE_HEADER); FILE *fp;
+        float *pfloat = (float*)((char*)net->weight_buf + sizeof(WEIGHTS_FILE_HEADER)); FILE *fp;
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 FILTER *filter = &net->layer_list[i].filter;
@@ -476,9 +476,8 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     mat = &(net->layer_list[0].matrix);
     if (mat->channels != 3) { printf("invalid input matrix channels: %d !\n", mat->channels); return; }
     if (!mat->data) {
-        mat->data = malloc((mat->width + mat->padw * 2) * (mat->height + mat->padh * 2) * mat->channels * sizeof(float));
+        mat->data = calloc(1, (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2) * mat->channels * sizeof(float));
         if (!mat->data) { printf("failed to allocate memory for net input !\n"); return; }
-        else matrix_fill_pad(mat, 0);
     }
 
     if (w * mat->height > h * mat->width) {
