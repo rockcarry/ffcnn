@@ -222,6 +222,24 @@ static void layer_route_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
     }
 }
 
+static void layer_yolo_forward(LAYER *ilayer, LAYER *olayer)
+{
+    int i, j, k;
+    printf("%d %d %d\n", ilayer->matrix.width, ilayer->matrix.height, ilayer->matrix.channels);
+    for (i=0; i<ilayer->matrix.height; i++) {
+        for (j=0; j<ilayer->matrix.width; j++) {
+            int    channel = 0;
+            float *score   = NULL;
+            for (k=0; k<3; k++) {
+                channel = k * (4 + 1 + 80) + 4;
+                score   = ilayer->matrix.data + channel * (ilayer->matrix.width + ilayer->matrix.padw * 2) * (ilayer->matrix.height + ilayer->matrix.padh * 2);
+                score  += (i + ilayer->matrix.padh) * (ilayer->matrix.width + ilayer->matrix.padw * 2) + j + ilayer->matrix.padw;
+                printf("(%2d, %2d) %f %f %f %f %f\n", j, i, score[-4], score[-3], score[-2], score[-1], score[0]);
+            }
+        }
+    }
+}
+
 static void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 {
     switch (ilayer->type) {
@@ -232,6 +250,7 @@ static void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
     case LAYER_TYPE_DROPOUT : layer_dropout_forward   (ilayer, olayer);       break;
     case LAYER_TYPE_SHORTCUT: layer_shortcut_forward  (head, ilayer, olayer); break;
     case LAYER_TYPE_ROUTE   : layer_route_forward     (head, ilayer, olayer); break;
+    case LAYER_TYPE_YOLO    : layer_yolo_forward      (ilayer, olayer);       break;
     }
 }
 
@@ -473,9 +492,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
         s1 = h;
         s2 = sh;
     }
-    p1 = mat->data;
-    p2 = mat->data + 1 * mat->width * mat->height;
-    p3 = mat->data + 2 * mat->width * mat->height;
+    p1 = mat->data + (mat->width + mat->padw * 2) * mat->padh + mat->padw;
+    p2 = mat->data + 1 * (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2);
+    p3 = mat->data + 2 * (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2);
     for (i=0; i<sh; i++) {
         for (j=0; j<sw; j++) {
             int x, y, r, g, b;
@@ -484,9 +503,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             b = bgr[y * w * 3 + x * 3 + 0];
             g = bgr[y * w * 3 + x * 3 + 1];
             r = bgr[y * w * 3 + x * 3 + 2];
-            p1[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[0]) * norm[0];
-            p2[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[1]) * norm[1];
-            p3[(mat->padh + i) * (mat->width + mat->padw * 2) + mat->padw + j] = (b - mean[2]) * norm[2];
+            p1[i * (mat->width + mat->padw * 2) + j] = (b - mean[0]) * norm[0];
+            p2[i * (mat->width + mat->padw * 2) + j] = (g - mean[1]) * norm[1];
+            p3[i * (mat->width + mat->padw * 2) + j] = (r - mean[2]) * norm[2];
         }
     }
 }
@@ -580,9 +599,9 @@ int main(int argc, char *argv[])
 
     if (0 != bmp_load(&mybmp, file_bmp)) { printf("failed to load bmp file: %s !\n", file_bmp); return -1; }
     mynet = net_load(file_cfg, file_weights);
+    net_dump   (mynet);
     net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, MEAN, NORM);
     net_forward(mynet);
-    net_dump   (mynet);
     net_free   (mynet);
     bmp_free(&mybmp);
     getch();
