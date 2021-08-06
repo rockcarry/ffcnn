@@ -131,9 +131,10 @@ static void layer_groupconv_forward(LAYER *ilayer, LAYER *olayer)
     tolayer.matrix.channels /= ilayer->groups;
     for (i=0; i<ilayer->groups; i++) {
         layer_convolution_forward(&tilayer, &tolayer);
-        tolayer.matrix.data += (tolayer.matrix.width + tolayer.matrix.padw * 2) * (tolayer.matrix.height + tolayer.matrix.padh * 2) * tilayer.filter.n;
+        tolayer.matrix.data += (tolayer.matrix.width + tolayer.matrix.padw * 2) * (tolayer.matrix.height + tolayer.matrix.padh * 2) * tolayer.matrix.channels;
         tilayer.matrix.data += (tilayer.matrix.width + tilayer.matrix.padw * 2) * (tilayer.matrix.height + tilayer.matrix.padh * 2) * tilayer.matrix.channels;
         tilayer.filter.data +=  tilayer.filter.width * tilayer.filter.height * tilayer.filter.channels * tilayer.filter.n;
+        tilayer.filter.bias++; tilayer.filter.scale++; tilayer.filter.rolling_mean++; tilayer.filter.rolling_variance++;
     }
 }
 
@@ -548,9 +549,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             b = bgr[y * w * 3 + x * 3 + 0];
             g = bgr[y * w * 3 + x * 3 + 1];
             r = bgr[y * w * 3 + x * 3 + 2];
-            p1[i * (mat->width + mat->padw * 2) + j] = (b - mean[0]) * norm[0];
+            p1[i * (mat->width + mat->padw * 2) + j] = (r - mean[0]) * norm[0];
             p2[i * (mat->width + mat->padw * 2) + j] = (g - mean[1]) * norm[1];
-            p3[i * (mat->width + mat->padw * 2) + j] = (r - mean[2]) * norm[2];
+            p3[i * (mat->width + mat->padw * 2) + j] = (b - mean[2]) * norm[2];
         }
     }
 }
