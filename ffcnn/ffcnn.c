@@ -493,8 +493,8 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
         s2 = sh;
     }
     p1 = mat->data + (mat->width + mat->padw * 2) * mat->padh + mat->padw;
-    p2 = mat->data + 1 * (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2);
-    p3 = mat->data + 2 * (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2);
+    p2 = p1 + (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2);
+    p3 = p2 + (mat->width + mat->padw * 2) * (mat->height + mat->padh * 2);
     for (i=0; i<sh; i++) {
         for (j=0; j<sw; j++) {
             int x, y, r, g, b;
