@@ -559,23 +559,33 @@ void net_dump(NET *net)
     printf("total weights: %d, total bytes: %d\n", net->weight_size, sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float));
 }
 
+#if 1
+#include "bmpfile.h"
 int main(int argc, char *argv[])
 {
+    char *file_bmp    = "test.bmp";
     char *file_cfg    = "yolo-fastest-1.1.cfg";
-    char *file_weight = "yolo-fastest-1.1.weight";
-    char  bgr[640 * 480 * 3];
+    char *file_weights= "yolo-fastest-1.1.weights";
+    NET  *mynet       = NULL;
+    BMP   mybmp       = {0};
     float MEAN[3] = { 0.0f, 0.0f, 0.0f };
     float NORM[3] = { 1/255.f, 1/255.f, 1/255.f };
-    NET  *net = NULL;
 
-    if (argc > 1) file_cfg    = argv[1];
-    if (argc > 2) file_weight = argv[2];
+    if (argc > 1) file_bmp    = argv[1];
+    if (argc > 2) file_cfg    = argv[2];
+    if (argc > 3) file_weights= argv[3];
+    printf("file_bmp    : %s\n", file_bmp    );
+    printf("file_cfg    : %s\n", file_cfg    );
+    printf("file_weights: %s\n", file_weights);
 
-    net = net_load(file_cfg, file_weight);
-    net_input  (net, bgr, 640, 480, MEAN, NORM);
-    net_forward(net);
-    net_dump   (net);
-    net_free   (net);
+    if (0 != bmp_load(&mybmp, file_bmp)) { printf("failed to load bmp file: %s !\n", file_bmp); return -1; }
+    mynet = net_load(file_cfg, file_weights);
+    net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, MEAN, NORM);
+    net_forward(mynet);
+    net_dump   (mynet);
+    net_free   (mynet);
+    bmp_free(&mybmp);
     getch();
     return 0;
 }
+#endif
