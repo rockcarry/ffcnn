@@ -49,6 +49,7 @@ int bmp_load(BMP *pb, char *file)
     fp = fopen(file, "rb");
     if (!fp) return -1;
 
+    (void)ret;
     ret = (int)fread(&header, sizeof(header), 1, fp);
     pb->width  = header.biWidth;
     pb->height = header.biHeight;
