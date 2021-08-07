@@ -657,7 +657,7 @@ void net_dump(NET *net)
             printf("%3d %8s %3d/%3d %2dx%2dx%3d   %d/%2d   %3dx%3dx%3d -> %3dx%3dx%3d  %d/%-6s %d\n", i,
                 get_layer_type_string(net->layer_list[i].type), net->layer_list[i].filter.n, net->layer_list[i].groups,
                 net->layer_list[i].filter.width, net->layer_list[i].filter.height, net->layer_list[i].filter.channels,
-              !!net->layer_list[i].matrix.pad, net->layer_list[i].stride,
+                net->layer_list[i].matrix.pad, net->layer_list[i].stride,
                 net->layer_list[i+0].matrix.width, net->layer_list[i+0].matrix.height, net->layer_list[i+0].matrix.channels,
                 net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels,
                 net->layer_list[i].batchnorm, get_activation_type_string(net->layer_list[i].activate), net->layer_list[i].refcnt);
