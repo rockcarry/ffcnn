@@ -3,7 +3,6 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
-#include <conio.h>
 #include "ffcnn.h"
 
 #ifdef _MSC_VER
@@ -685,7 +684,6 @@ int main(int argc, char *argv[])
     net_free   (mynet);
     bmp_save(&mybmp, "out.bmp");
     bmp_free(&mybmp);
-    getch();
     return 0;
 }
 #endif
