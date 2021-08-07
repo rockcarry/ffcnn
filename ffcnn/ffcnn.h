@@ -36,8 +36,16 @@ typedef struct {
 } LAYER;
 
 typedef struct {
+    int   type;
+    float score, x1, y1, x2, y2;
+} BBOX;
+
+typedef struct {
     LAYER *layer_list;
     int    layer_num;
+    BBOX  *bbox_list;
+    int    bbox_num;
+    int    bbox_max;
     int    s1, s2;
     int    weight_size;
     float *weight_buf;

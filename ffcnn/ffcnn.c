@@ -186,9 +186,9 @@ static void layer_dropout_forward(LAYER *ilayer, LAYER *olayer)
     ilayer->matrix.data = NULL;
 }
 
-static void layer_shortcut_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
+static void layer_shortcut_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
-    LAYER  *slayer = head + ilayer->depend_list[0] + 1;
+    LAYER  *slayer = net->layer_list + ilayer->depend_list[0] + 1;
     MATRIX *mr = &olayer->matrix, *m1 = &ilayer->matrix, *m2 = &slayer->matrix;
     int     mwr= mr->width + mr->pad * 2;
     int     mw1= m1->width + m1->pad * 2;
@@ -209,13 +209,13 @@ static void layer_shortcut_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
     }
 }
 
-static void layer_route_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
+static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     int    mwo   = olayer->matrix.width + olayer->matrix.pad * 2;
     float *datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
     int    i, j, k;
     for (i=0; i<ilayer->depend_num; i++) {
-        LAYER *rlayer = head + ilayer->depend_list[i] + 1;
+        LAYER *rlayer = net->layer_list + ilayer->depend_list[i] + 1;
         int    mwr    = rlayer->matrix.width + rlayer->matrix.pad * 2;
         float *datar  = rlayer->matrix.data + rlayer->matrix.pad * mwr + rlayer->matrix.pad;
         for (j=0; j<rlayer->matrix.channels; j++) {
@@ -233,7 +233,7 @@ static float get_matrix_data(MATRIX *mat, int w, int h, int c)
     return mat->data[c * mw * mh + h * mw + w];
 }
 
-static void layer_yolo_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
+static void layer_yolo_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     int i, j, k, l; float confidence;
     for (i=0; i<ilayer->matrix.height; i++) {
@@ -252,32 +252,36 @@ static void layer_yolo_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
                 }
                 confidence = 1.0f / ((1.0f + (float)exp(-bs) * (1.0f + (float)exp(-cs))));
                 if (confidence >= ilayer->ignore_thres) {
-                    float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * head->matrix.width / ilayer->matrix.width;
-                    float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * head->matrix.width / ilayer->matrix.height;
+                    float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.width;
+                    float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.height;
                     float bbox_w    = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
                     float bbox_h    = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
-                    float bbox_xmin = bbox_cx - bbox_w * 0.5f;
-                    float bbox_ymin = bbox_cy - bbox_h * 0.5f;
-                    float bbox_xmax = bbox_cx + bbox_w * 0.5f;
-                    float bbox_ymax = bbox_cy + bbox_h * 0.5f;
-                    printf("%d %5.2f, bbox_xmin: %5.2f, bbox_ymin: %5.2f, bbox_xmax: %5.2f, bbox_ymax: %5.2f\n", cindex, confidence, bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax);
+                    if (net->bbox_num < net->bbox_max && net->bbox_list) {
+                        net->bbox_list[net->bbox_num].type  = cindex;
+                        net->bbox_list[net->bbox_num].score = confidence;
+                        net->bbox_list[net->bbox_num].x1    = bbox_cx - bbox_w * 0.5f;
+                        net->bbox_list[net->bbox_num].y1    = bbox_cy - bbox_h * 0.5f;
+                        net->bbox_list[net->bbox_num].x2    = bbox_cx + bbox_w * 0.5f;
+                        net->bbox_list[net->bbox_num].y2    = bbox_cy + bbox_h * 0.5f;
+                        net->bbox_num++;
+                    }
                 }
             }
         }
     }
 }
 
-static void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
+static void layer_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     switch (ilayer->type) {
-    case LAYER_TYPE_CONV    : layer_groupconv_forward (ilayer, olayer);       break;
-    case LAYER_TYPE_AVGPOOL : layer_avgmaxpool_forward(ilayer, olayer, 0);    break;
-    case LAYER_TYPE_MAXPOOL : layer_avgmaxpool_forward(ilayer, olayer, 1);    break;
-    case LAYER_TYPE_UPSAMPLE: layer_upsample_forward  (ilayer, olayer);       break;
-    case LAYER_TYPE_DROPOUT : layer_dropout_forward   (ilayer, olayer);       break;
-    case LAYER_TYPE_SHORTCUT: layer_shortcut_forward  (head, ilayer, olayer); break;
-    case LAYER_TYPE_ROUTE   : layer_route_forward     (head, ilayer, olayer); break;
-    case LAYER_TYPE_YOLO    : layer_yolo_forward      (head, ilayer, olayer); break;
+    case LAYER_TYPE_CONV    : layer_groupconv_forward (ilayer, olayer);      break;
+    case LAYER_TYPE_AVGPOOL : layer_avgmaxpool_forward(ilayer, olayer, 0);   break;
+    case LAYER_TYPE_MAXPOOL : layer_avgmaxpool_forward(ilayer, olayer, 1);   break;
+    case LAYER_TYPE_UPSAMPLE: layer_upsample_forward  (ilayer, olayer);      break;
+    case LAYER_TYPE_DROPOUT : layer_dropout_forward   (ilayer, olayer);      break;
+    case LAYER_TYPE_SHORTCUT: layer_shortcut_forward  (net, ilayer, olayer); break;
+    case LAYER_TYPE_ROUTE   : layer_route_forward     (net, ilayer, olayer); break;
+    case LAYER_TYPE_YOLO    : layer_yolo_forward      (net, ilayer, olayer); break;
     }
 }
 
@@ -485,6 +489,8 @@ NET* net_load(char *fcfg, char *fweights)
         }
         if ((fp = fopen(fweights, "rb"))) { fseek (fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET); fread (net->weight_buf, 1, net->weight_size * sizeof(float), fp); fclose(fp); }
     }
+    net->bbox_max = (net->layer_list[0].matrix.width / 32) * (net->layer_list[0].matrix.height / 32) * 3;
+    net->bbox_list= malloc(net->bbox_max * sizeof(BBOX));
     return net;
 }
 
@@ -499,6 +505,7 @@ void net_free(NET *net)
         }
     }
     free(net->weight_buf);
+    free(net->bbox_list );
     free(net);
 }
 
@@ -540,10 +547,54 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     }
 }
 
+static int bbox_cmp(const void *p1, const void *p2)
+{
+    if      (((BBOX*)p1)->score < ((BBOX*)p2)->score) return  1;
+    else if (((BBOX*)p1)->score > ((BBOX*)p2)->score) return -1;
+    else return 0;
+}
+
+static int nms(BBOX *bboxlist, int n, float threshold, int min, int s1, int s2)
+{
+    int i, j, c;
+    if (!bboxlist || !n) return 0;
+    qsort(bboxlist, n, sizeof(BBOX), bbox_cmp);
+    for (i=0; i<n && i!=-1; ) {
+        for (c=i,j=i+1,i=-1; j<n; j++) {
+            if (bboxlist[j].score == 0) continue;
+            if (bboxlist[c].type == bboxlist[j].type) {
+                float xc1, yc1, xc2, yc2, sc, s1, s2, ss, iou;
+                xc1 = bboxlist[c].x1 > bboxlist[j].x1 ? bboxlist[c].x1 : bboxlist[j].x1;
+                yc1 = bboxlist[c].y1 > bboxlist[j].y1 ? bboxlist[c].y1 : bboxlist[j].y1;
+                xc2 = bboxlist[c].x2 < bboxlist[j].x2 ? bboxlist[c].x2 : bboxlist[j].x2;
+                yc2 = bboxlist[c].y2 < bboxlist[j].y2 ? bboxlist[c].y2 : bboxlist[j].y2;
+                sc  = (xc1 < xc2 && yc1 < yc2) ? (xc2 - xc1) * (yc2 - yc1) : 0;
+                s1  = (bboxlist[c].x2 - bboxlist[c].x1) * (bboxlist[c].y2 - bboxlist[c].y1);
+                s2  = (bboxlist[j].x2 - bboxlist[j].x1) * (bboxlist[j].y2 - bboxlist[j].y1);
+                ss  = s1 + s2 - sc;
+                if (min) iou = sc / (s1 < s2 ? s1 : s2);
+                else     iou = sc / ss;
+                if (iou > threshold) bboxlist[j].score = 0;
+                else if (i == -1) i = j;
+            } else if (i == -1) i = j;
+        }
+    }
+    for (i=0,j=0; i<n; i++) {
+        if (bboxlist[i].score) {
+            bboxlist[j  ].x1 = bboxlist[i].x1 * s1 / s2;
+            bboxlist[j  ].y1 = bboxlist[i].y1 * s1 / s2;
+            bboxlist[j  ].x2 = bboxlist[i].x2 * s1 / s2;
+            bboxlist[j++].y2 = bboxlist[i].y2 * s1 / s2;
+        }
+    }
+    return j;
+}
+
 void net_forward(NET *net)
 {
     LAYER *ilayer, *olayer; int i, j;
     if (!net) return;
+    net->bbox_num = 0;
     for (i=0; i<net->layer_num; i++) {
         if (net->layer_list[i].depend_num > 0) {
             for (j=0; j<net->layer_list[i].depend_num; j++) {
@@ -560,7 +611,7 @@ void net_forward(NET *net)
             else matrix_fill_pad(&olayer->matrix, olayer->type == LAYER_TYPE_MAXPOOL ? -FLT_MAX : 0);
         }
 
-        layer_forward(net->layer_list, ilayer, olayer);
+        layer_forward(net, ilayer, olayer);
 
         if (i > 0 && ilayer->refcnt == 0) { free(ilayer->matrix.data); ilayer->matrix.data = NULL; }
         for (j=0; j<ilayer->depend_num; j++) {
@@ -570,6 +621,7 @@ void net_forward(NET *net)
             }
         }
     }
+    net->bbox_num = nms(net->bbox_list, net->bbox_num, 0.5f, 1, net->s1, net->s2);
 }
 
 void net_dump(NET *net)
@@ -615,6 +667,7 @@ int main(int argc, char *argv[])
     char *file_weights= "yolo-fastest-1.1.weights";
     NET  *mynet       = NULL;
     BMP   mybmp       = {0};
+    int   i;
 
     if (argc > 1) file_bmp    = argv[1];
     if (argc > 2) file_cfg    = argv[2];
@@ -628,7 +681,9 @@ int main(int argc, char *argv[])
     net_dump   (mynet);
     net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
     net_forward(mynet);
+    for (i=0; i<mynet->bbox_num; i++) bmp_rectangle(&mybmp, (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2, 0, 255, 0);
     net_free   (mynet);
+    bmp_save(&mybmp, "out.bmp");
     bmp_free(&mybmp);
     getch();
     return 0;
