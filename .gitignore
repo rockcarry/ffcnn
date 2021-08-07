@@ -2,6 +2,8 @@
 *.ncb
 *.suo
 *.user
+*.exe
+out.bmp
 debug/
 Debug/
 release/
