@@ -2,7 +2,7 @@
 #define _FFCNN_H_
 
 typedef struct {
-    int    width, height, channels, padw, padh;
+    int    width, height, channels, pad;
     float *data;
 } MATRIX;
 
@@ -22,20 +22,17 @@ enum {
     LAYER_TYPE_YOLO    ,
 };
 typedef struct {
-    int     type;
-    int     refcnt;
+    int     type, refcnt;
     MATRIX  matrix;
     FILTER  filter;
-    int     stride, pad, groups;
-    int     batchnorm, activate;
+    int     stride, groups, batchnorm, activate;
     int     depend_list[4];
     int     depend_num;
 
     int     class_num;
     int     anchor_num;
     int     anchor_list[9][2];
-    float   scale_x_y;
-    float   ignore_thres;
+    float   ignore_thres, scale_x_y;
 } LAYER;
 
 typedef struct {
