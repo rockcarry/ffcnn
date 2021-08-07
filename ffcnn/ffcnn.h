@@ -38,6 +38,7 @@ typedef struct {
 typedef struct {
     LAYER *layer_list;
     int    layer_num;
+    int    s1, s2;
     int    weight_size;
     float *weight_buf;
 } NET;

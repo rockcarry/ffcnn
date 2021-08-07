@@ -27,7 +27,7 @@ static float activate(float x, int type)
     switch (type) {
     case ACTIVATE_TYPE_RELU   : return x > 0 ? x : 0;
     case ACTIVATE_TYPE_LEAKY  : return x > 0 ? x : 0.1f * x;
-    case ACTIVATE_TYPE_SIGMOID: return (float)(1.0f / (1.0f + exp(-x)));
+    case ACTIVATE_TYPE_SIGMOID: return 1.0f / (1.0f + (float)exp(-x));
     default: return x;
     }
 }
@@ -233,38 +233,34 @@ static float get_matrix_data(MATRIX *mat, int w, int h, int c)
     return mat->data[c * mw * mh + h * mw + w];
 }
 
-static void layer_yolo_forward(LAYER *ilayer, LAYER *olayer)
+static void layer_yolo_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
 {
-    int i, j, k, l;
+    int i, j, k, l; float confidence;
     for (i=0; i<ilayer->matrix.height; i++) {
         for (j=0; j<ilayer->matrix.width; j++) {
             for (k=0; k<3; k++) {
-                int cstart = k * (4 + 1 + 80);
-                float tx = get_matrix_data(&ilayer->matrix, j, i, cstart + 0);
-                float ty = get_matrix_data(&ilayer->matrix, j, i, cstart + 1);
-                float tw = get_matrix_data(&ilayer->matrix, j, i, cstart + 2);
-                float th = get_matrix_data(&ilayer->matrix, j, i, cstart + 3);
-                float bs = get_matrix_data(&ilayer->matrix, j, i, cstart + 4);
-                float cs = get_matrix_data(&ilayer->matrix, j, i, cstart + 5);
-                int class_index = 0;
-                for (l=1; l<80; l++) {
-                    float ts = get_matrix_data(&ilayer->matrix, j, i, cstart + 5 + l);
-                    if (cs < ts) { cs = ts; class_index = l; }
+                int dstart = k * (4 + 1 + ilayer->class_num), cindex = 0;
+                float tx = get_matrix_data(&ilayer->matrix, j, i, dstart + 0);
+                float ty = get_matrix_data(&ilayer->matrix, j, i, dstart + 1);
+                float tw = get_matrix_data(&ilayer->matrix, j, i, dstart + 2);
+                float th = get_matrix_data(&ilayer->matrix, j, i, dstart + 3);
+                float bs = get_matrix_data(&ilayer->matrix, j, i, dstart + 4);
+                float cs = get_matrix_data(&ilayer->matrix, j, i, dstart + 5);
+                for (l=1; l<ilayer->class_num; l++) {
+                    float val = get_matrix_data(&ilayer->matrix, j, i, dstart + 5 + l);
+                    if (cs < val) { cs = val; cindex = l; }
                 }
-                if (1) {
-                    float confidence = (float)(1.0f / ((1.0f + exp(-bs) * (1.0f + exp(-cs)))));
-                    if (confidence >= ilayer->ignore_thres) {
-                        float bias_w = 1, bias_h = 1, net_w = 1, net_h = 1; // todo...
-                        float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) / ilayer->matrix.width ;
-                        float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) / ilayer->matrix.height;
-                        float bbox_w    = (float)(exp(tw) * bias_w / net_w);
-                        float bbox_h    = (float)(exp(th) * bias_h / net_h);
-                        float bbox_xmin = bbox_cx - bbox_w * 0.5f;
-                        float bbox_ymin = bbox_cy - bbox_h * 0.5f;
-                        float bbox_xmax = bbox_cx + bbox_w * 0.5f;
-                        float bbox_ymax = bbox_cy + bbox_h * 0.5f;
-                        printf("%d %5.2f, bbox_xmin: %5.2f, bbox_ymin: %5.2f, bbox_xmax: %5.2f, bbox_ymax: %5.2f\n", class_index, confidence, bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax);
-                    }
+                confidence = 1.0f / ((1.0f + (float)exp(-bs) * (1.0f + (float)exp(-cs))));
+                if (confidence >= ilayer->ignore_thres) {
+                    float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * head->matrix.width / ilayer->matrix.width;
+                    float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * head->matrix.width / ilayer->matrix.height;
+                    float bbox_w    = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
+                    float bbox_h    = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
+                    float bbox_xmin = bbox_cx - bbox_w * 0.5f;
+                    float bbox_ymin = bbox_cy - bbox_h * 0.5f;
+                    float bbox_xmax = bbox_cx + bbox_w * 0.5f;
+                    float bbox_ymax = bbox_cy + bbox_h * 0.5f;
+                    printf("%d %5.2f, bbox_xmin: %5.2f, bbox_ymin: %5.2f, bbox_xmax: %5.2f, bbox_ymax: %5.2f\n", cindex, confidence, bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax);
                 }
             }
         }
@@ -281,7 +277,7 @@ static void layer_forward(LAYER *head, LAYER *ilayer, LAYER *olayer)
     case LAYER_TYPE_DROPOUT : layer_dropout_forward   (ilayer, olayer);       break;
     case LAYER_TYPE_SHORTCUT: layer_shortcut_forward  (head, ilayer, olayer); break;
     case LAYER_TYPE_ROUTE   : layer_route_forward     (head, ilayer, olayer); break;
-    case LAYER_TYPE_YOLO    : layer_yolo_forward      (ilayer, olayer);       break;
+    case LAYER_TYPE_YOLO    : layer_yolo_forward      (head, ilayer, olayer); break;
     }
 }
 
@@ -509,7 +505,7 @@ void net_free(NET *net)
 void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm)
 {
     MATRIX *mat = NULL;
-    int    sw, sh, s1, s2, i, j;
+    int    sw, sh, i, j;
     float  *p1, *p2, *p3;
     if (!net) return;
 
@@ -521,23 +517,19 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     }
 
     if (w * mat->height > h * mat->width) {
-        sw = mat->width;
-        sh = mat->width * h / w;
-        s1 = w;
-        s2 = sw;
+        sw = mat->width ; sh = mat->width * h / w;
+        net->s1 = w; net->s2 = sw;
     } else {
-        sh = mat->height;
-        sw = mat->height* w / h;
-        s1 = h;
-        s2 = sh;
+        sh = mat->height; sw = mat->height* w / h;
+        net->s1 = h; net->s2 = sh;
     }
     p1 = mat->data + (mat->width + mat->pad * 2) * mat->pad + mat->pad;
     p2 = p1 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
     p3 = p2 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
     for (i=0; i<sh; i++) {
         for (j=0; j<sw; j++) {
-            int x = j * s1 / s2;
-            int y = i * s1 / s2;
+            int x = j * net->s1 / net->s2;
+            int y = i * net->s1 / net->s2;
             int b = bgr[y * w * 3 + x * 3 + 0];
             int g = bgr[y * w * 3 + x * 3 + 1];
             int r = bgr[y * w * 3 + x * 3 + 2];
