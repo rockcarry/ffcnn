@@ -31,6 +31,17 @@ static float activate(float x, int type)
     }
 }
 
+static float fast_inverse_sqrt(float x)
+{
+    union { float f; int32_t i; } fui;
+    float halfx = 0.5f * x;
+    fui.f = x;
+    fui.i = 0x5F3759DF - (fui.i >> 1);
+    x     = fui.f;
+    x     = x * (1.5f - halfx * x * x);
+    return x;
+}
+
 static void matrix_fill_pad(MATRIX *mat, float val)
 {
     float *data = mat->data;
@@ -100,7 +111,7 @@ static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
                     else    datao[oy * mwo + ox]+= val;
                     if (i == ilayer->matrix.channels - 1) {
                         if (ilayer->batchnorm) {
-                            datao[oy * mwo + ox] = (datao[oy * mwo + ox] - ilayer->filter.rolling_mean[n])/(float)sqrt(ilayer->filter.rolling_variance[n] + 0.00001f);
+                            datao[oy * mwo + ox] = (datao[oy * mwo + ox] - ilayer->filter.rolling_mean[n]) * fast_inverse_sqrt(ilayer->filter.rolling_variance[n] + 0.00001f);
                             datao[oy * mwo + ox]*= ilayer->filter.scale[n];
                         }
                         datao[oy * mwo + ox]+= ilayer->filter.bias[n];
@@ -657,6 +668,20 @@ void net_dump(NET *net)
 
 #if 1
 #include "bmpfile.h"
+
+#ifdef WIN32
+#include <windows.h>
+#define get_tick_count GetTickCount
+#else
+#include <time.h>
+static uint32_t get_tick_count()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     static const float MEAN[3] = { 0.0f, 0.0f, 0.0f };
@@ -666,7 +691,7 @@ int main(int argc, char *argv[])
     char *file_weights= "yolo-fastest-1.1.weights";
     NET  *mynet       = NULL;
     BMP   mybmp       = {0};
-    int   i;
+    unsigned tick, i;
 
     if (argc > 1) file_bmp    = argv[1];
     if (argc > 2) file_cfg    = argv[2];
@@ -677,11 +702,15 @@ int main(int argc, char *argv[])
 
     if (0 != bmp_load(&mybmp, file_bmp)) { printf("failed to load bmp file: %s !\n", file_bmp); return -1; }
     mynet = net_load(file_cfg, file_weights);
-    net_dump   (mynet);
-    net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
-    net_forward(mynet);
+    net_dump(mynet);
+    tick = get_tick_count();
+    for (i=0; i<100; i++) {
+        net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
+        net_forward(mynet);
+    }
+    printf("%dms\n", (int)get_tick_count() - (int)tick);
     for (i=0; i<mynet->bbox_num; i++) bmp_rectangle(&mybmp, (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2, 0, 255, 0);
-    net_free   (mynet);
+    net_free(mynet);
     bmp_save(&mybmp, "out.bmp");
     bmp_free(&mybmp);
     return 0;
