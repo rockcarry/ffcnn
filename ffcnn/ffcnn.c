@@ -662,7 +662,7 @@ void net_dump(NET *net)
                 net->layer_list[i].batchnorm, get_activation_type_string(net->layer_list[i].activate), net->layer_list[i].refcnt);
         }
     }
-    printf("total weights: %d, total bytes: %d\n", net->weight_size, sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float));
+    printf("total weights: %d, total bytes: %d\n", net->weight_size, (int)(sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float)));
 }
 
 #if 1
