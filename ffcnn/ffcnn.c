@@ -586,10 +586,12 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int s1, int s2)
     }
     for (i=0,j=0; i<n; i++) {
         if (bboxlist[i].score) {
-            bboxlist[j  ].x1 = bboxlist[i].x1 * s1 / s2;
-            bboxlist[j  ].y1 = bboxlist[i].y1 * s1 / s2;
-            bboxlist[j  ].x2 = bboxlist[i].x2 * s1 / s2;
-            bboxlist[j++].y2 = bboxlist[i].y2 * s1 / s2;
+            bboxlist[j  ].score= bboxlist[i].score;
+            bboxlist[j  ].type = bboxlist[i].type;
+            bboxlist[j  ].x1   = bboxlist[i].x1 * s1 / s2;
+            bboxlist[j  ].y1   = bboxlist[i].y1 * s1 / s2;
+            bboxlist[j  ].x2   = bboxlist[i].x2 * s1 / s2;
+            bboxlist[j++].y2   = bboxlist[i].y2 * s1 / s2;
         }
     }
     return j;
@@ -704,7 +706,11 @@ int main(int argc, char *argv[])
         net_forward(mynet);
     }
     printf("%dms\n", (int)get_tick_count() - (int)tick);
-    for (i=0; i<mynet->bbox_num; i++) bmp_rectangle(&mybmp, (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2, 0, 255, 0);
+    for (i=0; i<mynet->bbox_num; i++) {
+        printf("score: %.2f, category: %2d, rect: (%3d %3d %3d %3d)\n", mynet->bbox_list[i].score, mynet->bbox_list[i].type,
+            (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2);
+        bmp_rectangle(&mybmp, (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2, 0, 255, 0);
+    }
     net_free(mynet);
     bmp_save(&mybmp, "out.bmp");
     bmp_free(&mybmp);
