@@ -99,13 +99,13 @@ static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
     mwi = ilayer->matrix.width + ilayer->matrix.pad * 2;
     mwo = olayer->matrix.width + olayer->matrix.pad * 2;
 
-    datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
-    dataf = ilayer->filter.data;
-    for (n=0; n<olayer->matrix.channels; n++) {
-        datai = ilayer->matrix.data;
-        for (i=0; i<ilayer->matrix.channels; i++) {
-            for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
-                for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
+    datai = ilayer->matrix.data;
+    for (i=0; i<ilayer->matrix.channels; i++) {
+        for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
+            for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
+                datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
+                dataf = ilayer->filter.data + i * fw * fh;
+                for (n=0; n<olayer->matrix.channels; n++) {
                     float val = filter_conv(datai, mwi, ix, iy, dataf, fw, fh);
                     if (!i) datao[oy * mwo + ox] = val;
                     else    datao[oy * mwo + ox]+= val;
@@ -114,15 +114,14 @@ static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
                             datao[oy * mwo + ox] = (datao[oy * mwo + ox] - ilayer->filter.rolling_mean[n]) * fast_inverse_sqrt(ilayer->filter.rolling_variance[n] + 0.00001f);
                             datao[oy * mwo + ox]*= ilayer->filter.scale[n];
                         }
-                        datao[oy * mwo + ox]+= ilayer->filter.bias[n];
-                        datao[oy * mwo + ox] = activate(datao[oy * mwo + ox], ilayer->activate);
+                        datao[oy * mwo + ox] = activate(datao[oy * mwo + ox] + ilayer->filter.bias[n], ilayer->activate);
                     }
+                    datao += (olayer->matrix.height + olayer->matrix.pad * 2) * mwo;
+                    dataf += fw * fh * ilayer->filter.channels;
                 }
             }
-            datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
-            dataf += fw * fh;
         }
-        datao += (olayer->matrix.height + olayer->matrix.pad * 2) * mwo;
+        datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
     }
 }
 
@@ -691,7 +690,7 @@ int main(int argc, char *argv[])
     char *file_weights= "yolo-fastest-1.1.weights";
     NET  *mynet       = NULL;
     BMP   mybmp       = {0};
-    unsigned tick, i;
+    int   tick, i;
 
     if (argc > 1) file_bmp    = argv[1];
     if (argc > 2) file_cfg    = argv[2];
@@ -703,7 +702,7 @@ int main(int argc, char *argv[])
     if (0 != bmp_load(&mybmp, file_bmp)) { printf("failed to load bmp file: %s !\n", file_bmp); return -1; }
     mynet = net_load(file_cfg, file_weights);
     net_dump(mynet);
-    tick = get_tick_count();
+    tick = (int)get_tick_count();
     for (i=0; i<100; i++) {
         net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
         net_forward(mynet);
