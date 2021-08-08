@@ -249,10 +249,6 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer, LAYER *olayer)
         for (j=0; j<ilayer->matrix.width; j++) {
             for (k=0; k<3; k++) {
                 int dstart = k * (4 + 1 + ilayer->class_num), cindex = 0;
-                float tx = get_matrix_data(&ilayer->matrix, j, i, dstart + 0);
-                float ty = get_matrix_data(&ilayer->matrix, j, i, dstart + 1);
-                float tw = get_matrix_data(&ilayer->matrix, j, i, dstart + 2);
-                float th = get_matrix_data(&ilayer->matrix, j, i, dstart + 3);
                 float bs = get_matrix_data(&ilayer->matrix, j, i, dstart + 4);
                 float cs = get_matrix_data(&ilayer->matrix, j, i, dstart + 5);
                 for (l=1; l<ilayer->class_num; l++) {
@@ -261,10 +257,14 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                 }
                 confidence = 1.0f / ((1.0f + (float)exp(-bs) * (1.0f + (float)exp(-cs))));
                 if (confidence >= ilayer->ignore_thres) {
-                    float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.width;
-                    float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.height/ ilayer->matrix.height;
-                    float bbox_w    = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
-                    float bbox_h    = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
+                    float tx = get_matrix_data(&ilayer->matrix, j, i, dstart + 0);
+                    float ty = get_matrix_data(&ilayer->matrix, j, i, dstart + 1);
+                    float tw = get_matrix_data(&ilayer->matrix, j, i, dstart + 2);
+                    float th = get_matrix_data(&ilayer->matrix, j, i, dstart + 3);
+                    float bbox_cx = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.width;
+                    float bbox_cy = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.height/ ilayer->matrix.height;
+                    float bbox_w  = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
+                    float bbox_h  = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
                     if (net->bbox_num < net->bbox_max && net->bbox_list) {
                         net->bbox_list[net->bbox_num].type  = cindex;
                         net->bbox_list[net->bbox_num].score = confidence;
