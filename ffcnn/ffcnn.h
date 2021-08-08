@@ -7,7 +7,7 @@ typedef struct {
 } MATRIX;
 
 typedef struct {
-    int    width, height, channels, n;
+    int    size, channels, n;
     float *data, *bias, *scale, *rolling_mean, *rolling_variance;
 } FILTER;
 
