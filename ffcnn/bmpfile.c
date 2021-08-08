@@ -121,7 +121,7 @@ void bmp_free(BMP *pb)
 void bmp_setpixel(BMP *pb, int x, int y, int r, int g, int b)
 {
     uint8_t *pbyte = (uint8_t*)pb->pdata;
-    if (x >= pb->width || y >= pb->height) return;
+    if (x < 0 || x >= pb->width || y < 0 || y >= pb->height) return;
     r = r < 0 ? 0 : r < 255 ? r : 255;
     g = g < 0 ? 0 : g < 255 ? g : 255;
     b = b < 0 ? 0 : b < 255 ? b : 255;

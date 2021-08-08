@@ -101,7 +101,7 @@ static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
 
     datai = ilayer->matrix.data;
     for (i=0; i<ilayer->matrix.channels; i++) {
-        for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
+        for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=fs,oy++) {
             for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
                 datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
                 dataf = ilayer->filter.data + i * fw * fh;
@@ -161,7 +161,7 @@ static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
     datai = ilayer->matrix.data;
     datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
     for (n=0; n<olayer->matrix.channels; n++) {
-        for (iy=0,oy=0; iy<ilayer->matrix.width; iy+=fs,oy++) {
+        for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=fs,oy++) {
             for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=fs,ox++) {
                 datao[oy * mwo + ox] = activate(filter_avgmax(datai, mwi, ix, iy, fw, fh, flag), ilayer->activate);
             }
@@ -262,7 +262,7 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                 confidence = 1.0f / ((1.0f + (float)exp(-bs) * (1.0f + (float)exp(-cs))));
                 if (confidence >= ilayer->ignore_thres) {
                     float bbox_cx   = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.width;
-                    float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.height;
+                    float bbox_cy   = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.height/ ilayer->matrix.height;
                     float bbox_w    = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
                     float bbox_h    = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
                     if (net->bbox_num < net->bbox_max && net->bbox_list) {
