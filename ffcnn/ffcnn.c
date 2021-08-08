@@ -459,8 +459,8 @@ NET* net_load(char *fcfg, char *fweights)
             net->layer_list[layercur++].type = LAYER_TYPE_ROUTE;
         } else if (strstr(pstart, "[yolo]") == pstart) {
             char *str; int masks[9]; int anchors[9][2];
-            parse_params(pstart, pend, "classes"      , strval, sizeof(strval)); net->layer_list[layercur].class_num   = (int  )atoi(strval);
-            parse_params(pstart, pend, "scale_x_y"    , strval, sizeof(strval)); net->layer_list[layercur].scale_x_y   = (float)atof(strval);
+            parse_params(pstart, pend, "classes"      , strval, sizeof(strval)); net->layer_list[layercur].class_num   = atoi(strval);
+            parse_params(pstart, pend, "scale_x_y"    , strval, sizeof(strval)); net->layer_list[layercur].scale_x_y   = (strcmp(strval, "") == 0) ? 1.0f : (float)atof(strval);
             parse_params(pstart, pend, "ignore_thresh", strval, sizeof(strval)); net->layer_list[layercur].ignore_thres= (float)atof(strval);
             parse_params(pstart, pend, "mask", strval, sizeof(strval));
             for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) masks[i] = atoi(str);
