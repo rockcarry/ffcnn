@@ -263,7 +263,7 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                     float bbox_cy = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.height/ ilayer->matrix.height;
                     float bbox_w  = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
                     float bbox_h  = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
-                    if (net->bbox_num < net->bbox_max && net->bbox_list) {
+                    if (net->bbox_num < net->bbox_max) {
                         net->bbox_list[net->bbox_num].type  = cindex;
                         net->bbox_list[net->bbox_num].score = confidence;
                         net->bbox_list[net->bbox_num].x1    = bbox_cx - bbox_w * 0.5f;
@@ -382,9 +382,10 @@ typedef struct {
 
 NET* net_load(char *fcfg, char *fweights)
 {
-    char *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
-    NET  *net    = NULL;
-    int   layers, layercur = 0, i;
+    char   *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
+    NET    *net    = NULL;
+    MATRIX *mat    = NULL;
+    int     layers, layercur = 0, i;
     if (!cfgstr) return NULL;
 
     layers = get_total_layers(cfgstr);
@@ -394,9 +395,7 @@ NET* net_load(char *fcfg, char *fweights)
     net->layer_num  = layers;
 
     while (pstart && (pstart = strstr(pstart, "["))) {
-        pend = strstr(pstart + 1, "[");
-        if (pend) pend = pend - 1;
-
+        if ((pend = strstr(pstart + 1, "["))) pend = pend - 1;
         if (strstr(pstart, "[net]") == pstart) {
             parse_params(pstart, pend, "width"   , strval, sizeof(strval)); net->layer_list[0].matrix.width   = atoi(strval);
             parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].matrix.height  = atoi(strval);
@@ -429,6 +428,9 @@ NET* net_load(char *fcfg, char *fweights)
             net->layer_list[layercur+1].matrix.height   = net->layer_list[layercur].matrix.height * net->layer_list[layercur].stride;
             net->layer_list[layercur++].type = LAYER_TYPE_UPSAMPLE;
         } else if (strstr(pstart, "[dropout]") == pstart || strstr(pstart, "[shortcut]") == pstart) {
+            net->layer_list[layercur + 1].matrix.channels = net->layer_list[layercur].matrix.channels;
+            net->layer_list[layercur + 1].matrix.width    = net->layer_list[layercur].matrix.width;
+            net->layer_list[layercur + 1].matrix.height   = net->layer_list[layercur].matrix.height;
             if (strstr(pstart, "[dropout]") == pstart) {
                 net->layer_list[layercur++].type = LAYER_TYPE_DROPOUT;
             } else {
@@ -437,9 +439,6 @@ NET* net_load(char *fcfg, char *fweights)
                 net->layer_list[layercur  ].depend_num = 1;
                 net->layer_list[layercur++].type = LAYER_TYPE_SHORTCUT;
             }
-            net->layer_list[layercur].matrix.channels = net->layer_list[layercur - 1].matrix.channels;
-            net->layer_list[layercur].matrix.width    = net->layer_list[layercur - 1].matrix.width;
-            net->layer_list[layercur].matrix.height   = net->layer_list[layercur - 1].matrix.height;
         } else if (strstr(pstart, "[route]") == pstart) {
             char *str; int dep = 0;
             parse_params(pstart, pend, "layers", strval, sizeof(strval));
@@ -451,7 +450,7 @@ NET* net_load(char *fcfg, char *fweights)
                 net->layer_list[layercur + 1].matrix.width     = net->layer_list[dep + 1].matrix.width;
                 net->layer_list[layercur + 1].matrix.height    = net->layer_list[dep + 1].matrix.height;
             }
-            net->layer_list[layercur].depend_num = i;
+            net->layer_list[layercur  ].depend_num = i;
             net->layer_list[layercur++].type = LAYER_TYPE_ROUTE;
         } else if (strstr(pstart, "[yolo]") == pstart) {
             char *str; int masks[9]; int anchors[9][2];
@@ -494,8 +493,12 @@ NET* net_load(char *fcfg, char *fweights)
         }
         if ((fp = fopen(fweights, "rb"))) { fseek (fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET); fread (net->weight_buf, 1, net->weight_size * sizeof(float), fp); fclose(fp); }
     }
-    net->bbox_max = (net->layer_list[0].matrix.width / 32) * (net->layer_list[0].matrix.height / 32) * 3;
-    net->bbox_list= malloc(net->bbox_max * sizeof(BBOX));
+
+    mat           = &(net->layer_list[0].matrix);
+    mat->data     = calloc(1, (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2) * mat->channels * sizeof(float));
+    net->bbox_max = (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2) * mat->channels * sizeof(float) / sizeof(BBOX);
+    net->bbox_list= (BBOX*)net->layer_list[0].matrix.data;
+    if (!net->weight_buf || !net->layer_list[0].matrix.data) { printf("failed to allocate buffers for net_load !\n"); net_free(net); net = NULL; }
     return net;
 }
 
@@ -510,7 +513,6 @@ void net_free(NET *net)
         }
     }
     free(net->weight_buf);
-    free(net->bbox_list );
     free(net);
 }
 
@@ -521,12 +523,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     float  *p1, *p2, *p3;
     if (!net) return;
 
+    memset(net->bbox_list, 0, sizeof(BBOX) * net->bbox_num); net->bbox_num = 0;
     mat = &(net->layer_list[0].matrix);
     if (mat->channels != 3) { printf("invalid input matrix channels: %d !\n", mat->channels); return; }
-    if (mat->data == NULL) {
-        mat->data = calloc(1, (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2) * mat->channels * sizeof(float));
-        if (!mat->data) { printf("failed to allocate memory for net input !\n"); return; }
-    }
 
     if (w * mat->height > h * mat->width) {
         sw = mat->width ; sh = mat->width * h / w;
@@ -594,6 +593,7 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int s1, int s2)
             bboxlist[j++].y2   = bboxlist[i].y2 * s1 / s2;
         }
     }
+    memset(bboxlist + j, 0, sizeof(BBOX) * (n - j));
     return j;
 }
 
@@ -601,7 +601,6 @@ void net_forward(NET *net)
 {
     LAYER *ilayer, *olayer; int i, j;
     if (!net) return;
-    net->bbox_num = 0;
     for (i=0; i<net->layer_num; i++) {
         if (net->layer_list[i].depend_num > 0) {
             for (j=0; j<net->layer_list[i].depend_num; j++) {
