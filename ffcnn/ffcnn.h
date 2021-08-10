@@ -7,7 +7,7 @@ typedef struct {
 } MATRIX;
 
 typedef struct {
-    int    size, channels, n;
+    int    size, channels, n, stride, groups, batchnorm, activate;
     float *data, *bias, *scale, *rolling_mean, *rolling_variance;
 } FILTER;
 
@@ -25,7 +25,6 @@ typedef struct {
     int     type, refcnt;
     MATRIX  matrix;
     FILTER  filter;
-    int     stride, groups, batchnorm, activate;
     int     depend_list[4];
     int     depend_num;
 
