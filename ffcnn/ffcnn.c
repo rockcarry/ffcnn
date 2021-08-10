@@ -229,6 +229,7 @@ void net_free(NET *net)
     int  i;
     if (!net) return;
     for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].matrix.data);
+    free(net->cnntmpbuf );
     free(net->weight_buf);
     free(net);
 }
@@ -342,71 +343,63 @@ static float fast_inverse_sqrt(float x)
     return x;
 }
 
-static float filter_conv(float *mat, int mw, int x, int y, float *flt, int fsize)
+static void im2row(MATRIX *matrix, int x, int y, int fsize, float *buf)
 {
-    float val = 0; int i, j;
-    mat += y * mw + x;
-    for (j=0; j<fsize; j++) {
-        for (i=0; i<fsize; i++) {
-            val += mat[j * mw + i] * flt[j * fsize + i];
+    float *data = matrix->data +  y * (matrix->width + matrix->pad * 2) + x;
+    int    i, j, k;
+    for (i=0; i<matrix->channels; i++) {
+        for (j=0; j<fsize; j++) {
+            for (k=0; k<fsize; k++) *buf++ = *data++;
+            data -= fsize;
+            data += matrix->width + matrix->pad * 2;
         }
+        data -= (matrix->width + matrix->pad * 2) * fsize;
+        data += (matrix->width + matrix->pad * 2) * (matrix->height + matrix->pad * 2);
     }
-    return val;
 }
 
-static void layer_convolution_forward(LAYER *ilayer, LAYER *olayer)
+static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
-    int  n, i, ix, iy, ox, oy, fsize, stride, mwi, mwo;
-    float *datai, *datao, *dataf;
-    fsize = ilayer->filter.size;
-    stride= ilayer->filter.stride;
-    mwi   = ilayer->matrix.width + ilayer->matrix.pad * 2;
-    mwo   = olayer->matrix.width + olayer->matrix.pad * 2;
+    MATRIX mati  = ilayer->matrix;
+    MATRIX mato  = olayer->matrix;
+    FILTER filter= ilayer->filter;
+    int    ftotal, ix, iy, ox, oy, i, j, n;
+    float *datao, *dataf;
 
-    datai = ilayer->matrix.data;
-    for (i=0; i<ilayer->matrix.channels; i++) {
-        for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=stride,oy++) {
-            for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=stride,ox++) {
-                datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
-                dataf = ilayer->filter.data + i * fsize * fsize;
-                for (n=0; n<olayer->matrix.channels; n++) {
-                    float val = filter_conv(datai, mwi, ix, iy, dataf, fsize);
-                    if (!i) datao[oy * mwo + ox] = val;
-                    else    datao[oy * mwo + ox]+= val;
-                    if (i == ilayer->matrix.channels - 1) {
-                        if (ilayer->filter.batchnorm) {
-                            datao[oy * mwo + ox] = (datao[oy * mwo + ox] - ilayer->filter.rolling_mean[n]) * fast_inverse_sqrt(ilayer->filter.rolling_variance[n] + 0.00001f);
-                            datao[oy * mwo + ox]*= ilayer->filter.scale[n];
-                        }
-                        datao[oy * mwo + ox] = activate(datao[oy * mwo + ox] + ilayer->filter.bias[n], ilayer->filter.activate);
+    mati.channels /= filter.groups;
+    mato.channels /= filter.groups;
+    filter.n      /= filter.groups;
+    ftotal         = filter.size * filter.size * filter.channels;
+    if (net->cnnbufsize < ftotal) {
+        net->cnnbufsize = ftotal;
+        if (net->cnntmpbuf) free(net->cnntmpbuf);
+        net->cnntmpbuf = malloc(net->cnnbufsize * sizeof(float));
+        if (net->cnntmpbuf == NULL) { printf("failed to allocate memory for cnntmpbuf !"); return; }
+    }
+
+    for (n=0; n<filter.groups; n++) {
+        for (iy=0,oy=0; iy<mati.height; iy+=filter.stride,oy++) {
+            for (ix=0,ox=0; ix<mati.width; ix+=filter.stride,ox++) {
+                im2row(&mati, ix, iy, filter.size, net->cnntmpbuf);
+                datao = mato.data + (mato.pad + oy) * (mato.width + mato.pad * 2) + mato.pad + ox;
+                for (dataf=filter.data,i=0; i<filter.n; i++) {
+                    for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntmpbuf[j];
+                    if (filter.batchnorm) {
+                        *datao = (*datao - filter.rolling_mean[i]) * fast_inverse_sqrt(filter.rolling_variance[i] + 0.00001f);
+                        *datao*= filter.scale[i];
                     }
-                    datao += (olayer->matrix.height + olayer->matrix.pad * 2) * mwo;
-                    dataf += fsize * fsize * ilayer->filter.channels;
+                   *datao  = activate(*datao + filter.bias[i], filter.activate);
+                    datao += (mato.width + mato.pad * 2) * (mato.height + mato.pad * 2);
                 }
             }
         }
-        datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
-    }
-}
-
-static void layer_groupconv_forward(LAYER *ilayer, LAYER *olayer)
-{
-    LAYER tilayer, tolayer; int i;
-    tolayer.matrix           = olayer->matrix;
-    tilayer.filter           = ilayer->filter;
-    tilayer.matrix           = ilayer->matrix;
-    tilayer.matrix.channels /= ilayer->filter.groups;
-    tilayer.filter.n        /= ilayer->filter.groups;
-    tolayer.matrix.channels /= ilayer->filter.groups;
-    for (i=0; i<ilayer->filter.groups; i++) {
-        layer_convolution_forward(&tilayer, &tolayer);
-        tolayer.matrix.data +=(tolayer.matrix.width + tolayer.matrix.pad * 2) * (tolayer.matrix.height + tolayer.matrix.pad * 2) * tolayer.matrix.channels;
-        tilayer.matrix.data +=(tilayer.matrix.width + tilayer.matrix.pad * 2) * (tilayer.matrix.height + tilayer.matrix.pad * 2) * tilayer.matrix.channels;
-        tilayer.filter.data += tilayer.filter.size * tilayer.filter.size * tilayer.filter.channels * tilayer.filter.n;
-        tilayer.filter.bias += tilayer.filter.n;
-        tilayer.filter.scale+= tilayer.filter.n;
-        tilayer.filter.rolling_mean     += tilayer.filter.n;
-        tilayer.filter.rolling_variance += tilayer.filter.n;
+        mati.data  += (mati.width + mati.pad * 2) * (mati.height + mati.pad * 2) * mati.channels;
+        mato.data  += (mato.width + mato.pad * 2) * (mato.height + mato.pad * 2) * mato.channels;
+        filter.data+= filter.size * filter.size * filter.channels * filter.n;
+        filter.bias            += filter.n;
+        filter.scale           += filter.n;
+        filter.rolling_mean    += filter.n;
+        filter.rolling_variance+= filter.n;
     }
 }
 
@@ -597,7 +590,7 @@ void net_forward(NET *net)
         }
 
         switch (ilayer->type) {
-        case LAYER_TYPE_CONV    : layer_groupconv_forward (ilayer, olayer);      break;
+        case LAYER_TYPE_CONV    : layer_groupconv_forward (net, ilayer, olayer); break;
         case LAYER_TYPE_AVGPOOL : layer_avgmaxpool_forward(ilayer, olayer, 0);   break;
         case LAYER_TYPE_MAXPOOL : layer_avgmaxpool_forward(ilayer, olayer, 1);   break;
         case LAYER_TYPE_UPSAMPLE: layer_upsample_forward  (ilayer, olayer);      break;

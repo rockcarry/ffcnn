@@ -48,6 +48,8 @@ typedef struct {
     int    s1, s2;
     int    weight_size;
     float *weight_buf;
+    float *cnntmpbuf;
+    int    cnnbufsize;
 } NET;
 
 NET* net_load   (char *file1, char *file2);
