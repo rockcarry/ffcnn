@@ -1,83 +1,83 @@
 +----------------------------+
- ffcnn ¾í»ýÉñ¾­ÍøÂçÇ°ÏòÍÆÀí¿â
+ ffcnn å·ç§¯ç¥žç»ç½‘ç»œå‰å‘æŽ¨ç†åº“
 +----------------------------+
 
-ffcnn ÊÇÒ»¸ö c ÓïÑÔ±àÐ´µÄ¾í»ýÉñ¾­ÍøÂçÇ°ÏòÍÆÀí¿â
-Ö»ÓÃÁË 600 ¶àÐÐ´úÂë¾ÍÊµÏÖÁËÍêÕûµÄ yolov3¡¢yolo-fastest ÍøÂçµÄÇ°ÏòÍÆÀí
-²»ÒÀÀµÓÚÈÎºÎµÚÈý·½¿â£¬ÔÚ±ê×¼ c »·¾³ÏÂ¾Í¿ÉÒÔ±àÒëÍ¨¹ý£¬ÔÚ VC¡¢msys2+gcc¡¢ubuntu+gcc
-µÈ¶à¸öÆ½Ì¨ÉÏ¶¼¿ÉÒÔÕýÈ·µÄ±àÒëÔËÐÐ
+ffcnn æ˜¯ä¸€ä¸ª c è¯­è¨€ç¼–å†™çš„å·ç§¯ç¥žç»ç½‘ç»œå‰å‘æŽ¨ç†åº“
+åªç”¨äº† 600 å¤šè¡Œä»£ç å°±å®žçŽ°äº†å®Œæ•´çš„ yolov3ã€yolo-fastest ç½‘ç»œçš„å‰å‘æŽ¨ç†
+ä¸ä¾èµ–äºŽä»»ä½•ç¬¬ä¸‰æ–¹åº“ï¼Œåœ¨æ ‡å‡† c çŽ¯å¢ƒä¸‹å°±å¯ä»¥ç¼–è¯‘é€šè¿‡ï¼Œåœ¨ VCã€msys2+gccã€ubuntu+gcc
+ç­‰å¤šä¸ªå¹³å°ä¸Šéƒ½å¯ä»¥æ­£ç¡®çš„ç¼–è¯‘è¿è¡Œ
 
-Õâ¸ö´úÂëÏà¶ÔÓÚ darknet¡¢ncnn À´Ëµ£¬ÐÔÄÜ»¹Ã»×öÈÎºÎÓÅ»¯£¬µ«´úÂë¸ü¼Ó¼ò½àÒ×¶®£¬¿ÉÒÔ×÷Îª
-´ó¼ÒÑ§Ï°¾í»ýÉñ¾­ÍøÂçµÄÒ»¸ö²Î¿¼
+è¿™ä¸ªä»£ç ç›¸å¯¹äºŽ darknetã€ncnn æ¥è¯´ï¼Œæ€§èƒ½è¿˜æ²¡åšä»»ä½•ä¼˜åŒ–ï¼Œä½†ä»£ç æ›´åŠ ç®€æ´æ˜“æ‡‚ï¼Œå¯ä»¥ä½œä¸º
+å¤§å®¶å­¦ä¹ å·ç§¯ç¥žç»ç½‘ç»œçš„ä¸€ä¸ªå‚è€ƒ
 
 
-darknet Óë yolov3 µÄÒ»Ð©×Ü½á
+darknet ä¸Ž yolov3 çš„ä¸€äº›æ€»ç»“
 ----------------------------
-yolov3 µÄÍøÂç½á¹¹ÀïÃæ£¬Ö»ÓÐ¾í»ý²ã¡¢dropout ²ã¡¢shortcut ²ã¡¢route ²ã¡¢maxpool ²ã¡¢
-upsample ²ãºÍ yolo ²ãÕâ¼¸ÖÖÀàÐÍ¡£Òò´ËÒªÊµÏÖÆðÀ´»¹ÊÇ±È½ÏÈÝÒ×µÄ
+yolov3 çš„ç½‘ç»œç»“æž„é‡Œé¢ï¼Œåªæœ‰å·ç§¯å±‚ã€dropout å±‚ã€shortcut å±‚ã€route å±‚ã€maxpool å±‚ã€
+upsample å±‚å’Œ yolo å±‚è¿™å‡ ç§ç±»åž‹ã€‚å› æ­¤è¦å®žçŽ°èµ·æ¥è¿˜æ˜¯æ¯”è¾ƒå®¹æ˜“çš„
 
-¾í»ý²ã£º
-1. Òª¸ãÃ÷°×¾í»ýµÄº¬ÒåºÍ¼ÆËã·½·¨
-2. ¾í»ýÔËËãµÄ pad¡¢stride µÄº¬Òå
-3. Ã¿¸ö¾í»ýºË»¹ÓÐÒ»¸ö bias ²ÎÊý£¬¼ÆËãÍêÃ¿¸öµãºóÐèÒª¼ÓÉÏÕâ¸ö bias
-   Ã»ÓÐ¹éÒ»»¯µÄÇé¿ö£¨batch_normalize£©£¬Æä¼ÆËã·½·¨£º
+å·ç§¯å±‚ï¼š
+1. è¦æžæ˜Žç™½å·ç§¯çš„å«ä¹‰å’Œè®¡ç®—æ–¹æ³•
+2. å·ç§¯è¿ç®—çš„ padã€stride çš„å«ä¹‰
+3. æ¯ä¸ªå·ç§¯æ ¸è¿˜æœ‰ä¸€ä¸ª bias å‚æ•°ï¼Œè®¡ç®—å®Œæ¯ä¸ªç‚¹åŽéœ€è¦åŠ ä¸Šè¿™ä¸ª bias
+   æ²¡æœ‰å½’ä¸€åŒ–çš„æƒ…å†µï¼ˆbatch_normalizeï¼‰ï¼Œå…¶è®¡ç®—æ–¹æ³•ï¼š
    x += bias;
    x  = activate(x, type);
-4. Òª¸ãÃ÷°×Ê²Ã´ÊÇ·Ö×é¾í»ý
-5. ¾í»ýÔËËãÃ¿¸öÊä³öµÄµã£¬¶¼Òª¾­¹ý¼¤»îº¯Êý
-6. ¾í»ý²ãÈç¹ûÓÐ¹éÒ»»¯²Ù×÷£¨batch_normalize£©£¬Æä¼ÆËã·½·¨£º
+4. è¦æžæ˜Žç™½ä»€ä¹ˆæ˜¯åˆ†ç»„å·ç§¯
+5. å·ç§¯è¿ç®—æ¯ä¸ªè¾“å‡ºçš„ç‚¹ï¼Œéƒ½è¦ç»è¿‡æ¿€æ´»å‡½æ•°
+6. å·ç§¯å±‚å¦‚æžœæœ‰å½’ä¸€åŒ–æ“ä½œï¼ˆbatch_normalizeï¼‰ï¼Œå…¶è®¡ç®—æ–¹æ³•ï¼š
    x  = (x + rolling_mean) / sqrt(rolling_variance + 0.00001f)
    x *= scale;
    x += bias;
    x  = activate(x, type);
-   ÆäÖÐ rolling_mean¡¢rolling_variance¡¢scale¡¢bias ÔÚ darknet µÄ weights ÎÄ¼þÖÐ¿ÉÒÔ¶ÁÈ¡µ½
+   å…¶ä¸­ rolling_meanã€rolling_varianceã€scaleã€bias åœ¨ darknet çš„ weights æ–‡ä»¶ä¸­å¯ä»¥è¯»å–åˆ°
 
-dropout ²ã£º
-Ç°ÏòÍÆÀíÊ±£¬ÕâÒ»²ã¿ÉÒÔµ±×ö²»´æÔÚ£¬ÊäÈëÊý¾Ý²»×öÈÎºÎ´¦Àí£¬Ö±½Ó´«¸øÏÂÒ»²ã¼´¿É
+dropout å±‚ï¼š
+å‰å‘æŽ¨ç†æ—¶ï¼Œè¿™ä¸€å±‚å¯ä»¥å½“åšä¸å­˜åœ¨ï¼Œè¾“å…¥æ•°æ®ä¸åšä»»ä½•å¤„ç†ï¼Œç›´æŽ¥ä¼ ç»™ä¸‹ä¸€å±‚å³å¯
 
-shortcut ²ã£º
-°ÑÖ¸¶¨²ãµÄÊý¾ÝºÍµ±Ç°²ãµÄÊý¾ÝÏà¼Ó£¬È»ºó½á¹ûÊä³öµ½ÏÂÒ»²ã
+shortcut å±‚ï¼š
+æŠŠæŒ‡å®šå±‚çš„æ•°æ®å’Œå½“å‰å±‚çš„æ•°æ®ç›¸åŠ ï¼Œç„¶åŽç»“æžœè¾“å‡ºåˆ°ä¸‹ä¸€å±‚
 
-route ²ã£º
-°ÑÖ¸¶¨µÄ²ã£¨×î¶à¿ÉÒÔÓÐ 4 ¸ö£©×öÆ´½Ó£¬¿í¸ß²»±ä£¬channel ¸öÊýÔö¼Ó£¬È»ºó½á¹ûÊä³öµ½ÏÂÒ»²ã
+route å±‚ï¼š
+æŠŠæŒ‡å®šçš„å±‚ï¼ˆæœ€å¤šå¯ä»¥æœ‰ 4 ä¸ªï¼‰åšæ‹¼æŽ¥ï¼Œå®½é«˜ä¸å˜ï¼Œchannel ä¸ªæ•°å¢žåŠ ï¼Œç„¶åŽç»“æžœè¾“å‡ºåˆ°ä¸‹ä¸€å±‚
 
-maxpool ²ã£º
-max ³Ø»¯²ã£¬½« filter ¸²¸ÇµÄÊý¾ÝÈ¡×î´óÖµ×÷Îª½á¹û
+maxpool å±‚ï¼š
+max æ± åŒ–å±‚ï¼Œå°† filter è¦†ç›–çš„æ•°æ®å–æœ€å¤§å€¼ä½œä¸ºç»“æžœ
 
-upsample ²ã£º
-ÉÏ²ÉÑù²ã£¬¿ÉÒÔÀí½âÎª°ÑÍ¼Ïñ·Å´ó£¬stride Ö¸¶¨ÁË·Å´ó±¶Êý£¬Ò»°ãÓÃ×î½üÁÚ·¨¾Í¿ÉÒÔÁË
+upsample å±‚ï¼š
+ä¸Šé‡‡æ ·å±‚ï¼Œå¯ä»¥ç†è§£ä¸ºæŠŠå›¾åƒæ”¾å¤§ï¼Œstride æŒ‡å®šäº†æ”¾å¤§å€æ•°ï¼Œä¸€èˆ¬ç”¨æœ€è¿‘é‚»æ³•å°±å¯ä»¥äº†
 
-yolo ²ã£º
-ÕâÒ»²ãÖ÷ÒªÊÇ¸ù¾ÝÊäÈëµÄ feature map ¼ÆËã³ö bbox
-ÒÔ yolo-fastest ÎªÀý£¬×Ü¹²ÓÐÁ½¸ö yolo ²ã£¬ÆäÊäÈë·Ö±ðÊÇ 10x10x255 ºÍ 20x20x255
-ÆäÖÐ 255 ±íÊ¾ÓÐ 255 ¸öÍ¨µÀ£¬ÆäÃ¿¸öÊý¾ÝµÄº¬ÒåÈçÏÂ£º
+yolo å±‚ï¼š
+è¿™ä¸€å±‚ä¸»è¦æ˜¯æ ¹æ®è¾“å…¥çš„ feature map è®¡ç®—å‡º bbox
+ä»¥ yolo-fastest ä¸ºä¾‹ï¼Œæ€»å…±æœ‰ä¸¤ä¸ª yolo å±‚ï¼Œå…¶è¾“å…¥åˆ†åˆ«æ˜¯ 10x10x255 å’Œ 20x20x255
+å…¶ä¸­ 255 è¡¨ç¤ºæœ‰ 255 ä¸ªé€šé“ï¼Œå…¶æ¯ä¸ªæ•°æ®çš„å«ä¹‰å¦‚ä¸‹ï¼š
 255 = 3 * (4 + 1 + 80)
-3 ±íÊ¾Õâ¸ö grid ÀïÃæÓÐ 3 ¸ö bbox ½á¹ûÊý¾Ý
-Ã¿¸ö bbox ½á¹ûÊý¾ÝÀïÃæ£¬4 ¸ö x, y, w, h ×ø±êÊý¾Ý£¬1 ¸ö object score ÆÀ·Ö£¬È»ºóÊÇ 80 ¸ö·ÖÀàµÄÆÀ·Ö
-Ã¿¸ö bbox ÀïÃæÔÚ 80 ¸ö·ÖÀàÖÐÕÒ³öÆÀ·Ö×î¸ßµÄ£¬×÷ÎªÕâ¸ö bbox µÄ·ÖÀà£¬ÆÀ·ÖÈç¹ûÐ¡ÓÚãÐÖµ£¨ignore_thresh£©Ôò¶ªÆú
-½«·ûºÏÒªÇóµÄÈ«²¿ bbox ·ÅÈëÒ»¸öÁÐ±í±£´æ£¬È»ºóÔÙ×öÒ»¸ö nms ²Ù×÷£¬¾ÍµÃµ½×îÖÕ½á¹ûÁË
+3 è¡¨ç¤ºè¿™ä¸ª grid é‡Œé¢æœ‰ 3 ä¸ª bbox ç»“æžœæ•°æ®
+æ¯ä¸ª bbox ç»“æžœæ•°æ®é‡Œé¢ï¼Œ4 ä¸ª x, y, w, h åæ ‡æ•°æ®ï¼Œ1 ä¸ª object score è¯„åˆ†ï¼Œç„¶åŽæ˜¯ 80 ä¸ªåˆ†ç±»çš„è¯„åˆ†
+æ¯ä¸ª bbox é‡Œé¢åœ¨ 80 ä¸ªåˆ†ç±»ä¸­æ‰¾å‡ºè¯„åˆ†æœ€é«˜çš„ï¼Œä½œä¸ºè¿™ä¸ª bbox çš„åˆ†ç±»ï¼Œè¯„åˆ†å¦‚æžœå°äºŽé˜ˆå€¼ï¼ˆignore_threshï¼‰åˆ™ä¸¢å¼ƒ
+å°†ç¬¦åˆè¦æ±‚çš„å…¨éƒ¨ bbox æ”¾å…¥ä¸€ä¸ªåˆ—è¡¨ä¿å­˜ï¼Œç„¶åŽå†åšä¸€ä¸ª nms æ“ä½œï¼Œå°±å¾—åˆ°æœ€ç»ˆç»“æžœäº†
 
-Ã¿¸ö bbox µÄÆÀ·ÖºÍ (x, y, w, h) ¼ÆËã·½·¨£º
-Éè tx, ty, tw, th, bs ·Ö±ð¶ÔÓ¦channel 0, 1, 2, 3, 4 µÄÖµ£¨ºóÃæ»¹ÓÐ 80 ¸ö·ÖÀàµÄÆÀ·Ö£©
+æ¯ä¸ª bbox çš„è¯„åˆ†å’Œ (x, y, w, h) è®¡ç®—æ–¹æ³•ï¼š
+è®¾ tx, ty, tw, th, bs åˆ†åˆ«å¯¹åº”channel 0, 1, 2, 3, 4 çš„å€¼ï¼ˆåŽé¢è¿˜æœ‰ 80 ä¸ªåˆ†ç±»çš„è¯„åˆ†ï¼‰
 
-ÆÀ·ÖµÄ¼ÆËã·½·¨£ºscore = sigmoid(bs); £¨80 ¸ö·ÖÀàÆÀ·Ö¼ÆËã·½·¨ÊÇÒ»ÑùµÄ£©
-×ø±ê¼ÆËã·½·¨£º
-float bbox_cx = (j + sigmod(tx)) * grid_width;  £¨grid_width ¾ÍÊÇÍøÂçÊäÈë²ã¼´ 0 ²ãµÄ¿í¶È³ýÒÔ¸ñ×ÓÊýÄ¿£¬¼´Ã¿¸ö¸ñ×ÓµÄÏñËØ¿í¶È£©
-float bbox_cy = (i + sigmod(ty)) * grid_height; £¨·½·¨Óë bbox_cx Ò»ÖÂ£©
-float bbox_w  = (float)exp(tw) * anchor_box_w;  £¨Èç¹ûÓÐËõ·ÅÏµÊý»¹Òª³ËÒÔÕâ¸öÏµÊý£©
-float bbox_h  = (float)exp(th) * anchor_box_h;  £¨·½·¨Óë bbox_w  Ò»ÖÂ£©
+è¯„åˆ†çš„è®¡ç®—æ–¹æ³•ï¼šscore = sigmoid(bs); ï¼ˆ80 ä¸ªåˆ†ç±»è¯„åˆ†è®¡ç®—æ–¹æ³•æ˜¯ä¸€æ ·çš„ï¼‰
+åæ ‡è®¡ç®—æ–¹æ³•ï¼š
+float bbox_cx = (j + sigmod(tx)) * grid_width;  ï¼ˆgrid_width å°±æ˜¯ç½‘ç»œè¾“å…¥å±‚å³ 0 å±‚çš„å®½åº¦é™¤ä»¥æ ¼å­æ•°ç›®ï¼Œå³æ¯ä¸ªæ ¼å­çš„åƒç´ å®½åº¦ï¼‰
+float bbox_cy = (i + sigmod(ty)) * grid_height; ï¼ˆæ–¹æ³•ä¸Ž bbox_cx ä¸€è‡´ï¼‰
+float bbox_w  = (float)exp(tw) * anchor_box_w;  ï¼ˆå¦‚æžœæœ‰ç¼©æ”¾ç³»æ•°è¿˜è¦ä¹˜ä»¥è¿™ä¸ªç³»æ•°ï¼‰
+float bbox_h  = (float)exp(th) * anchor_box_h;  ï¼ˆæ–¹æ³•ä¸Ž bbox_w  ä¸€è‡´ï¼‰
 
-bbox_cx¡¢bbox_cy ÊÇÖÐÐÄµã×ø±ê£¬bbox_w¡¢bbox_h ÊÇ¿í¸ß£¬×ª»»Ò»ÏÂµÃµ½£º
+bbox_cxã€bbox_cy æ˜¯ä¸­å¿ƒç‚¹åæ ‡ï¼Œbbox_wã€bbox_h æ˜¯å®½é«˜ï¼Œè½¬æ¢ä¸€ä¸‹å¾—åˆ°ï¼š
 x1 = bbox_cx - bbox_w * 0.5f;
 y1 = bbox_cy - bbox_h * 0.5f;
 x2 = bbox_cx + bbox_w * 0.5f;
 y2 = bbox_cy + bbox_h * 0.5f;
 
 
-darknet µÄ weights ÎÄ¼þ
+darknet çš„ weights æ–‡ä»¶
 -----------------------
 
-ÎÄ¼þ×îÇ°ÃæÓÐÒ»¸öÎÄ¼þÍ·£º
+æ–‡ä»¶æœ€å‰é¢æœ‰ä¸€ä¸ªæ–‡ä»¶å¤´ï¼š
 #pragma pack(1)
 typedef struct {
     int32_t  ver_major, ver_minor, ver_revision;
@@ -85,40 +85,40 @@ typedef struct {
 } WEIGHTS_FILE_HEADER;
 #pragma pack()
 
-È»ºó¾ÍÊÇÈ«²¿µÄÈ¨ÖØÊý¾Ý£¬yolov3¡¢yolo-fastest µÄÄ£¿é»ù±¾ÉÏ¾ÍÖ»ÓÐ¾í»ý²ãµÄÈ¨ÖØ£¬ÆäËü²ãÊÇÃ»ÓÐÈ¨ÖØÊý¾ÝµÄ¡£
-Í¼ÏñºÍ¾í»ýºË£¨filter£©µÄÊý¾Ý¶¼ÊÇ NCHW ¸ñÊ½£¬filter µÄÊý¾Ý´æ·ÅË³ÐòÎª£º
+ç„¶åŽå°±æ˜¯å…¨éƒ¨çš„æƒé‡æ•°æ®ï¼Œyolov3ã€yolo-fastest çš„æ¨¡å—åŸºæœ¬ä¸Šå°±åªæœ‰å·ç§¯å±‚çš„æƒé‡ï¼Œå…¶å®ƒå±‚æ˜¯æ²¡æœ‰æƒé‡æ•°æ®çš„ã€‚
+å›¾åƒå’Œå·ç§¯æ ¸ï¼ˆfilterï¼‰çš„æ•°æ®éƒ½æ˜¯ NCHW æ ¼å¼ï¼Œfilter çš„æ•°æ®å­˜æ”¾é¡ºåºä¸ºï¼š
 
-n ¸ö bias
+n ä¸ª bias
 if (batchnorm) {
-    n ¸ö scale
-    n ¸ö rolling_mean
-    n ¸ö rolling_variance
+    n ä¸ª scale
+    n ä¸ª rolling_mean
+    n ä¸ª rolling_variance
 }
-n * c * h * w ¸öÈ¨ÖØÊý¾Ý
+n * c * h * w ä¸ªæƒé‡æ•°æ®
 
 
-ffcnn µÄÌØµã
+ffcnn çš„ç‰¹ç‚¹
 ------------
-1. ¼«Îª¼ò½àÒ×¶®µÄ c ÓïÑÔ´úÂëÊµÏÖ
-2. ºËÐÄËã·¨½ö½ö 600 ÐÐ
-3. ²»ÒÀÀµÓÚÈÎºÎµÚÈý·½¿â
-4. ¿ÉÒÔºÜ·½±ãµÄÒÆÖ²µ½¸÷ÖÖÆ½Ì¨
-5. ÍÆÀíÊ±»á×Ô¶¯ÊÍ·Å²»ÐèÒªµÄ layer ¼õÐ¡ÄÚ´æÕ¼ÓÃ
-6. ÏÖ½×¶ÎÊÇ make it work first ºóÃæÓÐÊ±¼äÔÙÓÅ»¯ÐÔÄÜ
-7. Ö±½ÓÊ¹ÓÃ darknet µÄ .cfg ºÍ .weights ÎÄ¼þ£¨²»ÐèÒªÔÙ×ª»»£©
+1. æžä¸ºç®€æ´æ˜“æ‡‚çš„ c è¯­è¨€ä»£ç å®žçŽ°
+2. æ ¸å¿ƒç®—æ³•ä»…ä»… 600 è¡Œ
+3. ä¸ä¾èµ–äºŽä»»ä½•ç¬¬ä¸‰æ–¹åº“
+4. å¯ä»¥å¾ˆæ–¹ä¾¿çš„ç§»æ¤åˆ°å„ç§å¹³å°
+5. æŽ¨ç†æ—¶ä¼šè‡ªåŠ¨é‡Šæ”¾ä¸éœ€è¦çš„ layer å‡å°å†…å­˜å ç”¨
+6. çŽ°é˜¶æ®µæ˜¯ make it work first åŽé¢æœ‰æ—¶é—´å†ä¼˜åŒ–æ€§èƒ½
+7. ç›´æŽ¥ä½¿ç”¨ darknet çš„ .cfg å’Œ .weights æ–‡ä»¶ï¼ˆä¸éœ€è¦å†è½¬æ¢ï¼‰
 
 
-ffcnn vs ncnn ÐÔÄÜÆÀ²â
+ffcnn vs ncnn æ€§èƒ½è¯„æµ‹
 ----------------------
-ffcnn ´úÂë£ºhttps://github.com/rockcarry/ffcnn
-ncnn + yolo-fastest ´úÂë£ºhttps://github.com/rockcarry/ffyolodet
+ffcnn ä»£ç ï¼šhttps://github.com/rockcarry/ffcnn
+ncnn + yolo-fastest ä»£ç ï¼šhttps://github.com/rockcarry/ffyolodet
 
-Á½¸ö´úÂë¶¼ÊÇÊ¹ÓÃµÄ yolo-fastest-1.1 Ä£ÐÍ£¬²âÊÔÍ¼Æ¬¶¼ÊÇ test.bmp
-ÔÚÎÒ×Ô¼ºµÄ win7 x64 PC + msys2 gcc -O3 ²âÊÔ½á¹û£º
-ffcnn: 100 ´Î¼ÆËãºÄÊ±£º26224 ms  Ã¿Ö¡ 262ms  ÄÚ´æÕ¼ÓÃ£º4.5MB ×óÓÒ
-ncnn : 100 ´Î¼ÆËãºÄÊ±£º 8424 ms  Ã¿Ö¡ 84ms   ÄÚ´æÕ¼ÓÃ£º45MB  ×óÓÒ
+ä¸¤ä¸ªä»£ç éƒ½æ˜¯ä½¿ç”¨çš„ yolo-fastest-1.1 æ¨¡åž‹ï¼Œæµ‹è¯•å›¾ç‰‡éƒ½æ˜¯ test.bmp
+åœ¨æˆ‘è‡ªå·±çš„ win7 x64 PC + msys2 gcc -O3 æµ‹è¯•ç»“æžœï¼š
+ffcnn: 100 æ¬¡è®¡ç®—è€—æ—¶ï¼š26224 ms  æ¯å¸§ 262ms  å†…å­˜å ç”¨ï¼š4.5MB å·¦å³
+ncnn : 100 æ¬¡è®¡ç®—è€—æ—¶ï¼š 8424 ms  æ¯å¸§ 84ms   å†…å­˜å ç”¨ï¼š45MB  å·¦å³
 
-ncnn »¹ÊÇ±È ffcnn ¿ìºÜ¶à£¬´ó¸ÅÊÇ 3.1 ±¶¡£µ«ÊÇÄÚ´æÕ¼ÓÃ ffcnn ÉÙÁËºÜ¶à
+ncnn è¿˜æ˜¯æ¯” ffcnn å¿«å¾ˆå¤šï¼Œå¤§æ¦‚æ˜¯ 3.1 å€ã€‚ä½†æ˜¯å†…å­˜å ç”¨ ffcnn å°‘äº†å¾ˆå¤š
 
 
 rockcarry@163.com
