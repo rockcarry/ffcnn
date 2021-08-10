@@ -89,7 +89,7 @@ static char* get_layer_type_string(int type)
 
 static void calculate_output_whc(LAYER *in, LAYER *out)
 {
-    in->matrix.pad       = in->matrix.pad ? in->filter.size / 2 : 0;
+    in ->matrix.pad      = in->matrix.pad ? in->filter.size / 2 : 0;
     out->matrix.channels = in->filter.n;
     out->matrix.width    = in->type == LAYER_TYPE_CONV ? (in->matrix.width - in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.width / in->filter.stride;
     out->matrix.height   = in->type == LAYER_TYPE_CONV ? (in->matrix.height- in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.height/ in->filter.stride;
@@ -228,12 +228,7 @@ void net_free(NET *net)
 {
     int  i;
     if (!net) return;
-    for (i=0; i<net->layer_num+1; i++) {
-        if (net->layer_list[i].matrix.data) {
-            printf("net_free, free matrix memory for layer %d\n", i);
-            free(net->layer_list[i].matrix.data);
-        }
-    }
+    for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].matrix.data);
     free(net->weight_buf);
     free(net);
 }
