@@ -89,7 +89,7 @@ static char* get_layer_type_string(int type)
 
 static void calculate_output_whc(LAYER *in, LAYER *out)
 {
-    in ->matrix.pad      = in ->matrix.pad ? in->filter.size / 2 : 0;
+    if (in->matrix.pad) in->matrix.pad = in->type == LAYER_TYPE_CONV ? in->filter.size / 2 : in->filter.size - 1;
     out->matrix.channels = in->filter.n;
     out->matrix.width    = in->type == LAYER_TYPE_CONV ? (in->matrix.width - in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.width / in->filter.stride;
     out->matrix.height   = in->type == LAYER_TYPE_CONV ? (in->matrix.height- in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.height/ in->filter.stride;
@@ -435,18 +435,16 @@ static float filter_avgmax(float *mat, int mw, int x, int y, int fsize, int flag
 
 static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
 {
-    int  n, ix, iy, ox, oy, fsize, stride, mwi, mwo;
+    int  i, ix, iy, ox, oy, mwi, mwo;
     float *datai, *datao;
-    fsize = ilayer->filter.size;
-    stride= ilayer->filter.stride;
     mwi   = ilayer->matrix.width + ilayer->matrix.pad * 2;
     mwo   = olayer->matrix.width + olayer->matrix.pad * 2;
-    datai = ilayer->matrix.data;
+    datai = ilayer->matrix.data + ilayer->matrix.pad * mwi + ilayer->matrix.pad;
     datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
-    for (n=0; n<ilayer->matrix.channels; n++) {
-        for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=stride,oy++) {
-            for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=stride,ox++) {
-                datao[oy * mwo + ox] = activate(filter_avgmax(datai, mwi, ix, iy, fsize, flag), ilayer->filter.activate);
+    for (i=0; i<ilayer->matrix.channels; i++) {
+        for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=ilayer->filter.stride,oy++) {
+            for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=ilayer->filter.stride,ox++) {
+                datao[oy * mwo + ox] = activate(filter_avgmax(datai, mwi, ix, iy, ilayer->filter.size, flag), ilayer->filter.activate);
             }
         }
         datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
@@ -460,11 +458,11 @@ static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
     int    mwo   = olayer->matrix.width + olayer->matrix.pad * 2;
     float *datai = ilayer->matrix.data + ilayer->matrix.pad * mwi + ilayer->matrix.pad;
     float *datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
-    int    stride= ilayer->filter.stride, i, x, y;
+    int    i, x, y;
     for (i=0; i<ilayer->matrix.channels; i++) {
         for (y=0; y<olayer->matrix.height; y++) {
             for (x=0; x<olayer->matrix.width; x++) {
-                datao[y * mwo + x] = datai[(y / stride) * mwi + (x / stride)];
+                datao[y * mwo + x] = datai[(y / ilayer->filter.stride) * mwi + (x / ilayer->filter.stride)];
             }
         }
         datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
