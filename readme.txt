@@ -115,10 +115,10 @@ ncnn + yolo-fastest 代码：https://github.com/rockcarry/ffyolodet
 
 两个代码都是使用的 yolo-fastest-1.1 模型，测试图片都是 test.bmp
 在我自己的 win7 x64 PC + msys2 gcc -O3 测试结果：
-ffcnn: 100 次计算耗时：63165 ms  每帧 632ms  内存占用：4.5MB 左右
-ncnn : 100 次计算耗时： 8659 ms  每帧 87ms   内存占用：45MB  左右
+ffcnn: 100 次计算耗时：26224 ms  每帧 262ms  内存占用：4.5MB 左右
+ncnn : 100 次计算耗时： 8424 ms  每帧 84ms   内存占用：45MB  左右
 
-ncnn 还是比 ffcnn 快很多，大概是 7.3 倍。但是内存占用 ffcnn 少了很多
+ncnn 还是比 ffcnn 快很多，大概是 3.1 倍。但是内存占用 ffcnn 少了很多
 
 
 rockcarry@163.com
