@@ -89,7 +89,7 @@ static char* get_layer_type_string(int type)
 
 static void calculate_output_whc(LAYER *in, LAYER *out)
 {
-    if (in->matrix.pad) in->matrix.pad = in->type == LAYER_TYPE_CONV ? in->filter.size / 2 : in->filter.size - 1;
+    in->matrix.pad       = in->matrix.pad ? in->filter.size / 2 : 0;
     out->matrix.channels = in->filter.n;
     out->matrix.width    = in->type == LAYER_TYPE_CONV ? (in->matrix.width - in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.width / in->filter.stride;
     out->matrix.height   = in->type == LAYER_TYPE_CONV ? (in->matrix.height- in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.height/ in->filter.stride;
@@ -140,7 +140,6 @@ NET* net_load(char *fcfg, char *fweights)
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
             parse_params(pstart, pend, "size"  , strval, sizeof(strval)); net->layer_list[layercur].filter.size  = atoi(strval);
             parse_params(pstart, pend, "stride", strval, sizeof(strval)); net->layer_list[layercur].filter.stride= atoi(strval);
-            parse_params(pstart, pend, "pad"   , strval, sizeof(strval)); net->layer_list[layercur].matrix.pad   = strcmp(strval, "") == 0 ? 1 : atoi(strval);
             net->layer_list[layercur  ].filter.n = net->layer_list[layercur].matrix.channels;
             net->layer_list[layercur++].type = (strstr(pstart, "[avg") == pstart) ? LAYER_TYPE_AVGPOOL : LAYER_TYPE_MAXPOOL;
             calculate_output_whc(net->layer_list + layercur - 1, net->layer_list + layercur);
@@ -416,17 +415,19 @@ static void layer_groupconv_forward(LAYER *ilayer, LAYER *olayer)
     }
 }
 
-static float filter_avgmax(float *mat, int mw, int x, int y, int fsize, int flag)
+static float filter_avgmax(float *mat, int mw, int mh, int x, int y, int fsize, int flag)
 {
     float val = 0, max; int i, j;
     mat += y * mw + x;
     max  = mat[0];
-    for (j=0; j<fsize; j++) {
-        for (i=0; i<fsize; i++) {
-            if (flag) {
-                if (max < mat[j * mw + i]) max = mat[j * mw + i];
-            } else {
-                val += mat[j * mw + i];
+    for (i=0; i<fsize; i++) {
+        for (j=0; j<fsize; j++) {
+            if (j + x < mw && i + y < mh) {
+                if (flag) {
+                    if (max < mat[i * mw + j]) max = mat[i * mw + j];
+                } else {
+                    val += mat[i * mw + j];
+                }
             }
         }
     }
@@ -435,16 +436,17 @@ static float filter_avgmax(float *mat, int mw, int x, int y, int fsize, int flag
 
 static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
 {
-    int  i, ix, iy, ox, oy, mwi, mwo;
+    int  i, ix, iy, ox, oy, mwi, mhi, mwo;
     float *datai, *datao;
     mwi   = ilayer->matrix.width + ilayer->matrix.pad * 2;
+    mhi   = ilayer->matrix.height+ ilayer->matrix.pad * 2;
     mwo   = olayer->matrix.width + olayer->matrix.pad * 2;
     datai = ilayer->matrix.data + ilayer->matrix.pad * mwi + ilayer->matrix.pad;
     datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
     for (i=0; i<ilayer->matrix.channels; i++) {
         for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=ilayer->filter.stride,oy++) {
             for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=ilayer->filter.stride,ox++) {
-                datao[oy * mwo + ox] = activate(filter_avgmax(datai, mwi, ix, iy, ilayer->filter.size, flag), ilayer->filter.activate);
+                datao[oy * mwo + ox] = filter_avgmax(datai, mwi, mhi, ix, iy, ilayer->filter.size, flag);
             }
         }
         datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
