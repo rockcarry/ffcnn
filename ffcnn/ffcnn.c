@@ -533,7 +533,7 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer)
                     float val = get_matrix_data(&ilayer->matrix, j, i, dstart + 5 + l);
                     if (cs < val) { cs = val; cindex = l; }
                 }
-                confidence = activate(bs, ACTIVATE_TYPE_SIGMOID);
+                confidence = 1.0f / ((1.0f + (float)exp(-bs) * (1.0f + (float)exp(-cs))));
                 if (confidence >= ilayer->ignore_thres) {
                     float tx = get_matrix_data(&ilayer->matrix, j, i, dstart + 0);
                     float ty = get_matrix_data(&ilayer->matrix, j, i, dstart + 1);
@@ -545,7 +545,7 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer)
                     float bbox_h  = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
                     if (net->bbox_num < net->bbox_max) {
                         net->bbox_list[net->bbox_num].type  = cindex;
-                        net->bbox_list[net->bbox_num].score = activate(cs, ACTIVATE_TYPE_SIGMOID);;
+                        net->bbox_list[net->bbox_num].score = confidence;
                         net->bbox_list[net->bbox_num].x1    = bbox_cx - bbox_w * 0.5f;
                         net->bbox_list[net->bbox_num].y1    = bbox_cy - bbox_h * 0.5f;
                         net->bbox_list[net->bbox_num].x2    = bbox_cx + bbox_w * 0.5f;
