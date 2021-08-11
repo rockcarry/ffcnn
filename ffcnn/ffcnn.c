@@ -237,7 +237,7 @@ void net_free(NET *net)
 void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm)
 {
     MATRIX *mat = NULL;
-    int    sw, sh, i, j;
+    int    linebytes, sw, sh, i, j;
     float  *p1, *p2, *p3;
     if (!net) return;
 
@@ -252,20 +252,20 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
         sh = mat->height; sw = mat->height* w / h;
         net->s1 = h; net->s2 = sh;
     }
+    linebytes = ((w * 3) + 3) & ~3; // align to 4 bytes
     p1 = mat->data + (mat->width + mat->pad * 2) * mat->pad + mat->pad;
     p2 = p1 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
     p3 = p2 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
     for (i=0; i<sh; i++) {
         for (j=0; j<sw; j++) {
-            int x = j * net->s1 / net->s2;
-            int y = i * net->s1 / net->s2;
-            int b = bgr[y * w * 3 + x * 3 + 0];
-            int g = bgr[y * w * 3 + x * 3 + 1];
-            int r = bgr[y * w * 3 + x * 3 + 2];
-            p1[i * (mat->width + mat->pad * 2) + j] = (r - mean[0]) * norm[0];
-            p2[i * (mat->width + mat->pad * 2) + j] = (g - mean[1]) * norm[1];
-            p3[i * (mat->width + mat->pad * 2) + j] = (b - mean[2]) * norm[2];
+            int x = j * net->s1 / net->s2, y = i * net->s1 / net->s2;
+            *p1++ = (bgr[y * linebytes + x * 3 + 2] - mean[0]) * norm[0]; // r
+            *p2++ = (bgr[y * linebytes + x * 3 + 1] - mean[1]) * norm[1]; // g
+            *p3++ = (bgr[y * linebytes + x * 3 + 0] - mean[2]) * norm[2]; // b
         }
+        p1 += (mat->width + mat->pad * 2) - j;
+        p2 += (mat->width + mat->pad * 2) - j;
+        p3 += (mat->width + mat->pad * 2) - j;
     }
 }
 
