@@ -350,8 +350,7 @@ static void im2row(MATRIX *matrix, int x, int y, int fsize, float *buf)
     for (i=0; i<matrix->channels; i++) {
         for (j=0; j<fsize; j++) {
             for (k=0; k<fsize; k++) *buf++ = *data++;
-            data -= fsize;
-            data += matrix->width + matrix->pad * 2;
+            data += matrix->width + matrix->pad * 2 - k;
         }
         data -= (matrix->width + matrix->pad * 2) * fsize;
         data += (matrix->width + matrix->pad * 2) * (matrix->height + matrix->pad * 2);
@@ -405,21 +404,22 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 
 static float filter_avgmax(float *mat, int mw, int mh, int x, int y, int fsize, int flag)
 {
-    float val = 0, max; int i, j;
+    float val; int i, j;
     mat += y * mw + x;
-    max  = mat[0];
+    val  = flag ? *mat : 0;
     for (i=0; i<fsize; i++) {
-        for (j=0; j<fsize; j++) {
+        for (j=0; j<fsize; j++,mat++) {
             if (j + x < mw && i + y < mh) {
                 if (flag) {
-                    if (max < mat[i * mw + j]) max = mat[i * mw + j];
+                    if (val < *mat) val = *mat;
                 } else {
-                    val += mat[i * mw + j];
+                    val += *mat;
                 }
             }
         }
+        mat += mw - j;
     }
-    return flag ? max : val / (fsize * fsize);
+    return flag ? val : val / (fsize * fsize);
 }
 
 static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
