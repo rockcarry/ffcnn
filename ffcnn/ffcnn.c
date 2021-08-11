@@ -434,11 +434,12 @@ static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
     for (i=0; i<ilayer->matrix.channels; i++) {
         for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=ilayer->filter.stride,oy++) {
             for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=ilayer->filter.stride,ox++) {
-                datao[oy * mwo + ox] = filter_avgmax(datai, mwi, mhi, ix, iy, ilayer->filter.size, flag);
+                *datao++ = filter_avgmax(datai, mwi, mhi, ix, iy, ilayer->filter.size, flag);
             }
+            datao += mwo - ox;
         }
         datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
-        datao += (olayer->matrix.height + olayer->matrix.pad * 2) * mwo;
+        datao += olayer->matrix.pad * 2 * mwo;
     }
 }
 
@@ -452,11 +453,12 @@ static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
     for (i=0; i<ilayer->matrix.channels; i++) {
         for (y=0; y<olayer->matrix.height; y++) {
             for (x=0; x<olayer->matrix.width; x++) {
-                datao[y * mwo + x] = datai[(y / ilayer->filter.stride) * mwi + (x / ilayer->filter.stride)];
+                *datao++ = datai[(y / ilayer->filter.stride) * mwi + (x / ilayer->filter.stride)];
             }
+            datao += mwo - x;
         }
         datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
-        datao += (olayer->matrix.height + olayer->matrix.pad * 2) * mwo;
+        datao += olayer->matrix.pad * 2 * mwo;
     }
 }
 
@@ -469,23 +471,25 @@ static void layer_dropout_forward(LAYER *ilayer, LAYER *olayer)
 static void layer_shortcut_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     LAYER  *slayer = net->layer_list + ilayer->depend_list[0] + 1;
-    MATRIX *mr = &olayer->matrix, *m1 = &ilayer->matrix, *m2 = &slayer->matrix;
-    int     mwr= mr->width + mr->pad * 2;
-    int     mw1= m1->width + m1->pad * 2;
-    int     mw2= m2->width + m2->pad * 2;
-    float  *datar = mr->data + mr->pad * mwr + mr->pad;
-    float  *data1 = m1->data + m1->pad * mw1 + m1->pad;
-    float  *data2 = m2->data + m2->pad * mw2 + m2->pad;
+    int     mwo= olayer->matrix.width + olayer->matrix.pad * 2;
+    int     mw1= ilayer->matrix.width + ilayer->matrix.pad * 2;
+    int     mw2= slayer->matrix.width + slayer->matrix.pad * 2;
+    float  *datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
+    float  *data1 = ilayer->matrix.data + ilayer->matrix.pad * mw1 + ilayer->matrix.pad;
+    float  *data2 = slayer->matrix.data + slayer->matrix.pad * mw2 + slayer->matrix.pad;
     int     i, x, y;
-    for (i=0; i<mr->channels; i++) {
-        for (y=0; y<mr->height; y++) {
-            for (x=0; x<mr->width; x++) {
-                datar[y * mwr + x] = activate(data1[y * mw1 + x] + data2[y * mw2 + x], ilayer->filter.activate);
+    for (i=0; i<olayer->matrix.channels; i++) {
+        for (y=0; y<olayer->matrix.height; y++) {
+            for (x=0; x<olayer->matrix.width; x++) {
+                *datao++ = activate(*data1++ + *data2++, ilayer->filter.activate);
             }
+            datao += mwo - x;
+            data1 += mw1 - x;
+            data2 += mw2 - x;
         }
-        datar += (mr->height + mr->pad * 2) * mwr;
-        data1 += (m1->height + m1->pad * 2) * mw1;
-        data2 += (m2->height + m2->pad * 2) * mw2;
+        datao += olayer->matrix.pad * 2 * mwo;
+        data1 += ilayer->matrix.pad * 2 * mw1;
+        data2 += slayer->matrix.pad * 2 * mw2;
     }
 }
 
@@ -499,9 +503,12 @@ static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
         int    mwr    = rlayer->matrix.width + rlayer->matrix.pad * 2;
         float *datar  = rlayer->matrix.data + rlayer->matrix.pad * mwr + rlayer->matrix.pad;
         for (j=0; j<rlayer->matrix.channels; j++) {
-            for (k=0; k<rlayer->matrix.height; k++) memcpy(datao + k * mwo, datar + k * mwr, olayer->matrix.width * sizeof(float));
-            datao += mwo * (olayer->matrix.height + olayer->matrix.pad * 2);
-            datar += mwr * (rlayer->matrix.height + rlayer->matrix.pad * 2);
+            for (k=0; k<rlayer->matrix.height; k++) {
+                memcpy(datao, datar, olayer->matrix.width * sizeof(float));
+                datao += mwo; datar += mwr;
+            }
+            datao += olayer->matrix.pad * 2 * mwo;
+            datar += rlayer->matrix.pad * 2 * mwr;
         }
     }
 }
