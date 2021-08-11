@@ -346,15 +346,17 @@ static float fast_inverse_sqrt(float x)
 static void im2row(MATRIX *matrix, int x, int y, int fsize, float *buf)
 {
     float *data = matrix->data +  y * (matrix->width + matrix->pad * 2) + x;
-    int    i, j, k;
-    for (i=0; i<matrix->channels; i++) {
-        for (j=0; j<fsize; j++) {
-            for (k=0; k<fsize; k++) *buf++ = *data++;
-            data += matrix->width + matrix->pad * 2 - k;
+    int    add1 = matrix->width + matrix->pad * 2 - fsize;
+    int    add2 =(matrix->width + matrix->pad * 2) * ((matrix->height + matrix->pad * 2) - fsize);
+    int    n    = fsize * fsize * matrix->channels;
+    x = y = 0;
+    do {
+        *buf++ = *data++;
+        if (++x == fsize) {
+            if (1)            { x = 0; data += add1; }
+            if (++y == fsize) { y = 0; data += add2; }
         }
-        data -= (matrix->width + matrix->pad * 2) * fsize;
-        data += (matrix->width + matrix->pad * 2) * (matrix->height + matrix->pad * 2);
-    }
+    } while (--n);
 }
 
 static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
