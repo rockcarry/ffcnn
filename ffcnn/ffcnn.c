@@ -229,7 +229,7 @@ void net_free(NET *net)
     int  i;
     if (!net) return;
     for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].matrix.data);
-    free(net->cnntmpbuf );
+    free(net->cnntempbuf);
     free(net->weight_buf);
     free(net);
 }
@@ -371,18 +371,18 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     ftotal         = filter.size * filter.size * filter.channels;
     if (net->cnnbufsize < ftotal) {
         net->cnnbufsize = ftotal;
-        if (net->cnntmpbuf) free(net->cnntmpbuf);
-        net->cnntmpbuf = malloc(net->cnnbufsize * sizeof(float));
-        if (net->cnntmpbuf == NULL) { printf("failed to allocate memory for cnntmpbuf !"); return; }
+        if (net->cnntempbuf) free(net->cnntempbuf);
+        net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
+        if (net->cnntempbuf == NULL) { printf("failed to allocate memory for cnntempbuf !"); return; }
     }
 
     for (n=0; n<filter.groups; n++) {
         for (iy=0,oy=0; iy<mati.height; iy+=filter.stride,oy++) {
             for (ix=0,ox=0; ix<mati.width; ix+=filter.stride,ox++) {
-                im2row(&mati, ix, iy, filter.size, net->cnntmpbuf);
+                im2row(&mati, ix, iy, filter.size, net->cnntempbuf);
                 datao = mato.data + (mato.pad + oy) * (mato.width + mato.pad * 2) + mato.pad + ox;
                 for (dataf=filter.data,i=0; i<filter.n; i++) {
-                    for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntmpbuf[j];
+                    for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntempbuf[j];
                     if (filter.batchnorm) {
                         *datao = (*datao - filter.rolling_mean[i]) * fast_inverse_sqrt(filter.rolling_variance[i] + 0.00001f);
                         *datao*= filter.scale[i];

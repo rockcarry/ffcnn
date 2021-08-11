@@ -48,7 +48,7 @@ typedef struct {
     int    s1, s2;
     int    weight_size;
     float *weight_buf;
-    float *cnntmpbuf;
+    float *cnntempbuf;
     int    cnnbufsize;
 } NET;
 
