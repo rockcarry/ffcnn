@@ -87,7 +87,7 @@ static char* get_layer_type_string(int type)
     return (type >= 0 && type <= 7) ? (char*)STR_TAB[type] : "unknown";
 }
 
-static void calculate_output_whc(LAYER *in, LAYER *out)
+static void calculate_output_whcp(LAYER *in, LAYER *out)
 {
     in ->matrix.pad      = in->matrix.pad ? in->filter.size / 2 : 0;
     out->matrix.channels = in->filter.n;
@@ -136,13 +136,13 @@ NET* net_load(char *fcfg, char *fweights)
             net->weight_size += net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.channels * net->layer_list[layercur].filter.n;
             net->weight_size += net->layer_list[layercur].filter.n * (1 + !!net->layer_list[layercur].filter.batchnorm * 3);
             net->layer_list[layercur++].type = LAYER_TYPE_CONV;
-            calculate_output_whc(net->layer_list + layercur - 1, net->layer_list + layercur);
+            calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
             parse_params(pstart, pend, "size"  , strval, sizeof(strval)); net->layer_list[layercur].filter.size  = atoi(strval);
             parse_params(pstart, pend, "stride", strval, sizeof(strval)); net->layer_list[layercur].filter.stride= atoi(strval);
             net->layer_list[layercur  ].filter.n = net->layer_list[layercur].matrix.channels;
             net->layer_list[layercur++].type = (strstr(pstart, "[avg") == pstart) ? LAYER_TYPE_AVGPOOL : LAYER_TYPE_MAXPOOL;
-            calculate_output_whc(net->layer_list + layercur - 1, net->layer_list + layercur);
+            calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[upsample]") == pstart) {
             parse_params(pstart, pend, "stride" , strval, sizeof(strval)); net->layer_list[layercur].filter.stride = atoi(strval);
             net->layer_list[layercur+1].matrix.channels = net->layer_list[layercur].matrix.channels;
