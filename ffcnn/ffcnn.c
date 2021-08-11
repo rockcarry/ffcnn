@@ -595,7 +595,7 @@ void net_forward(NET *net)
         if (!olayer->matrix.data && ilayer->type != LAYER_TYPE_DROPOUT && ilayer->type != LAYER_TYPE_YOLO) {
             olayer->matrix.data = malloc((olayer->matrix.width + olayer->matrix.pad * 2) * (olayer->matrix.height + olayer->matrix.pad * 2) * olayer->matrix.channels * sizeof(float));
             if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
-            else matrix_fill_pad(&olayer->matrix, olayer->type == LAYER_TYPE_MAXPOOL ? -FLT_MAX : 0);
+            else if (olayer->matrix.pad) matrix_fill_pad(&olayer->matrix, olayer->type == LAYER_TYPE_MAXPOOL ? -FLT_MAX : 0);
         }
 
         switch (ilayer->type) {
