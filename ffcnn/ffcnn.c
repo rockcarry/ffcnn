@@ -565,19 +565,20 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer)
 
 static void matrix_fill_pad(MATRIX *mat, float val)
 {
-    float *data = mat->data;
-    int    pad  = mat->pad;
-    int    mw   = mat->width + pad * 2;
-    int    mh   = mat->height+ pad * 2;
-    int    i, x, y;
+    int    i, n, x;
+    int    mw = mat->width + mat->pad * 2;
+    float *p1 = mat->data, *p2;
     for (i=0; i<mat->channels; i++) {
-        for (y=0; y<pad; y++) {
-            for (x=0; x<mw ; x++) data[y * mw + x] = data[(mh - 1 - y) * mw + x] = val;
-        }
-        for (y=pad; y<mh-pad; y++) {
-            for (x=0; x<pad; x++) data[y * mw + x] = data[y * mw + (mw - 1 - x)] = val;
-        }
-        data += mw * mh;
+        p2= p1 + mw * (mat->pad + mat->height);
+        n = mw * mat->pad; do { *p1++ = *p2++ = val; } while (--n);
+        n = mat->height;
+        p2= p1 + mat->width + mat->pad;
+        do {
+            for (x=0; x<mat->pad; x++) *p1++ = *p2++ = val;
+            p1 += mat->width + mat->pad;
+            p2 += mat->width + mat->pad;
+        } while (--n);
+        p1 += mat->pad * mw;
     }
 }
 
