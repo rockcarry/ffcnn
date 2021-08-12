@@ -453,14 +453,17 @@ static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
     float *datao = olayer->matrix.data + olayer->matrix.pad * mwo + olayer->matrix.pad;
     int    i, x, y;
     for (i=0; i<ilayer->matrix.channels; i++) {
-        for (y=0; y<olayer->matrix.height; y++) {
-            for (x=0; x<olayer->matrix.width; x++) {
-                *datao++ = datai[(y / ilayer->filter.stride) * mwi + (x / ilayer->filter.stride)];
+        for (y=0; y<olayer->matrix.height;) {
+            for (x=0; x<olayer->matrix.width;) {
+                *datao++ = *datai;
+                if (++x % ilayer->filter.stride == 0) datai++;
             }
             datao += mwo - x;
+            datai -= x / ilayer->filter.stride;
+            if (++y % ilayer->filter.stride == 0) datai += mwi;
         }
-        datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
         datao += olayer->matrix.pad * 2 * mwo;
+        datai += ilayer->matrix.pad * 2 * mwi;
     }
 }
 
