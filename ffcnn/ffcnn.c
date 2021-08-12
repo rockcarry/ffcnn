@@ -107,7 +107,7 @@ NET* net_load(char *fcfg, char *fweights)
     char   *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
     NET    *net    = NULL;
     MATRIX *mat    = NULL;
-    int     layers, layercur = 0, i;
+    int     layers, layercur = 0, i, j;
     if (!cfgstr) return NULL;
 
     layers = get_total_layers(cfgstr);
@@ -201,6 +201,7 @@ NET* net_load(char *fcfg, char *fweights)
     net->weight_buf = malloc(net->weight_size * sizeof(float));
     if (net->weight_buf) {
         float *pfloat = net->weight_buf; FILE *fp;
+        if ((fp = fopen(fweights, "rb"))) { fseek (fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET); fread (net->weight_buf, 1, net->weight_size * sizeof(float), fp); fclose(fp); }
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 FILTER *filter = &net->layer_list[i].filter;
@@ -209,11 +210,11 @@ NET* net_load(char *fcfg, char *fweights)
                     filter->scale            = pfloat; pfloat += filter->n;
                     filter->rolling_mean     = pfloat; pfloat += filter->n;
                     filter->rolling_variance = pfloat; pfloat += filter->n;
+                    for (j=0; j<filter->n; j++) filter->scale[j] = (float)(filter->scale[j] / sqrt(filter->rolling_variance[j] + 0.00001f));
                 }
                 filter->data = pfloat; pfloat += filter->size * filter->size * filter->channels * filter->n;
             }
         }
-        if ((fp = fopen(fweights, "rb"))) { fseek (fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET); fread (net->weight_buf, 1, net->weight_size * sizeof(float), fp); fclose(fp); }
     }
 
     mat           = &(net->layer_list[0].matrix);
@@ -332,17 +333,6 @@ static float activate(float x, int type)
     }
 }
 
-static float fast_inverse_sqrt(float x)
-{
-    union { float f; int32_t i; } fui;
-    float halfx = 0.5f * x;
-    fui.f = x;
-    fui.i = 0x5F3759DF - (fui.i >> 1);
-    x     = fui.f;
-    x     = x * (1.5f - halfx * x * x);
-    return x;
-}
-
 static void im2row(MATRIX *matrix, int fsize, float *buf)
 {
     float *data = matrix->data;
@@ -387,19 +377,16 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                 datao = mato.data + (mato.pad + oy) * mwo + mato.pad + ox;
                 for (dataf=filter.data,i=0; i<filter.n; i++) {
                     for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntempbuf[j];
-                    if (filter.batchnorm) {
-                        *datao = (*datao - filter.rolling_mean[i]) * fast_inverse_sqrt(filter.rolling_variance[i] + 0.00001f);
-                        *datao*= filter.scale[i];
-                    }
+                    if (filter.batchnorm) *datao = (*datao - filter.rolling_mean[i]) * filter.scale[i];
                    *datao  = activate(*datao + filter.bias[i], filter.activate);
                     datao += mwo * (mato.height + mato.pad * 2);
                 }
             }
             mati.data += mwi * filter.stride - ix;
         }
-        mati.data  += mwi * ((mati.height + mati.pad * 2) * mati.channels - iy);
-        mato.data  += mwo *  (mato.height + mato.pad * 2) * mato.channels;
-        filter.data+= filter.size * filter.size * filter.channels * filter.n;
+        mati.data += mwi * ((mati.height + mati.pad * 2) * mati.channels - iy);
+        mato.data += mwo *  (mato.height + mato.pad * 2) * mato.channels;
+        filter.data            += filter.n * ftotal;
         filter.bias            += filter.n;
         filter.scale           += filter.n;
         filter.rolling_mean    += filter.n;
