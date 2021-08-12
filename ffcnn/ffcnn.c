@@ -584,7 +584,7 @@ static void matrix_fill_pad(MATRIX *mat, float val)
 
 void net_forward(NET *net)
 {
-    LAYER *ilayer, *olayer; int i, j;
+    LAYER *ilayer = net->layer_list, *olayer = net->layer_list + 1; int i, j;
     if (!net) return;
     for (i=0; i<net->layer_num; i++) {
         if (net->layer_list[i].depend_num > 0) {
@@ -593,9 +593,7 @@ void net_forward(NET *net)
             }
         }
     }
-    for (i=0; i<net->layer_num; i++) {
-        ilayer = net->layer_list + i + 0;
-        olayer = net->layer_list + i + 1;
+    for (i=0; i<net->layer_num; i++,ilayer++,olayer++) {
         if (!olayer->matrix.data && ilayer->type != LAYER_TYPE_DROPOUT && ilayer->type != LAYER_TYPE_YOLO) {
             olayer->matrix.data = malloc((olayer->matrix.width + olayer->matrix.pad * 2) * (olayer->matrix.height + olayer->matrix.pad * 2) * olayer->matrix.channels * sizeof(float));
             if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
