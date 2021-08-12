@@ -258,10 +258,10 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     p3 = p2 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
     for (i=0; i<sh; i++) {
         for (j=0; j<sw; j++) {
-            int x = j * net->s1 / net->s2, y = i * net->s1 / net->s2;
-            *p1++ = (bgr[y * linebytes + x * 3 + 2] - mean[0]) * norm[0]; // r
-            *p2++ = (bgr[y * linebytes + x * 3 + 1] - mean[1]) * norm[1]; // g
-            *p3++ = (bgr[y * linebytes + x * 3 + 0] - mean[2]) * norm[2]; // b
+            int x = j * net->s1 / net->s2, y = i * net->s1 / net->s2, k = y * linebytes + x * 3;
+            *p1++ = (bgr[k + 2] - mean[0]) * norm[0]; // r
+            *p2++ = (bgr[k + 1] - mean[1]) * norm[1]; // g
+            *p3++ = (bgr[k + 0] - mean[2]) * norm[2]; // b
         }
         p1 += (mat->width + mat->pad * 2) - j;
         p2 += (mat->width + mat->pad * 2) - j;
