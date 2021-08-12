@@ -343,13 +343,13 @@ static float fast_inverse_sqrt(float x)
     return x;
 }
 
-static void im2row(MATRIX *matrix, int x, int y, int fsize, float *buf)
+static void im2row(MATRIX *matrix, int fsize, float *buf)
 {
-    float *data = matrix->data +  y * (matrix->width + matrix->pad * 2) + x;
+    float *data = matrix->data;
     int    add1 = matrix->width + matrix->pad * 2 - fsize;
     int    add2 =(matrix->width + matrix->pad * 2) * ((matrix->height + matrix->pad * 2) - fsize);
     int    n    = fsize * fsize * matrix->channels;
-    x = y = 0;
+    int    x = 0, y = 0;
     do {
         *buf++ = *data++;
         if (++x == fsize) {
@@ -364,6 +364,8 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     MATRIX mati  = ilayer->matrix;
     MATRIX mato  = olayer->matrix;
     FILTER filter= ilayer->filter;
+    int    mwi   = mati.width + mati.pad * 2;
+    int    mwo   = mato.width + mato.pad * 2;
     int    ftotal, ix, iy, ox, oy, i, j, n;
     float *datao, *dataf;
 
@@ -381,8 +383,8 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     for (n=0; n<filter.groups; n++) {
         for (iy=0,oy=0; iy<mati.height; iy+=filter.stride,oy++) {
             for (ix=0,ox=0; ix<mati.width; ix+=filter.stride,ox++) {
-                im2row(&mati, ix, iy, filter.size, net->cnntempbuf);
-                datao = mato.data + (mato.pad + oy) * (mato.width + mato.pad * 2) + mato.pad + ox;
+                im2row(&mati, filter.size, net->cnntempbuf); mati.data += filter.stride;
+                datao = mato.data + (mato.pad + oy) * mwo + mato.pad + ox;
                 for (dataf=filter.data,i=0; i<filter.n; i++) {
                     for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntempbuf[j];
                     if (filter.batchnorm) {
@@ -390,12 +392,13 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                         *datao*= filter.scale[i];
                     }
                    *datao  = activate(*datao + filter.bias[i], filter.activate);
-                    datao += (mato.width + mato.pad * 2) * (mato.height + mato.pad * 2);
+                    datao += mwo * (mato.height + mato.pad * 2);
                 }
             }
+            mati.data += mwi * filter.stride - ix;
         }
-        mati.data  += (mati.width + mati.pad * 2) * (mati.height + mati.pad * 2) * mati.channels;
-        mato.data  += (mato.width + mato.pad * 2) * (mato.height + mato.pad * 2) * mato.channels;
+        mati.data  += mwi * ((mati.height + mati.pad * 2) * mati.channels - iy);
+        mato.data  += mwo *  (mato.height + mato.pad * 2) * mato.channels;
         filter.data+= filter.size * filter.size * filter.channels * filter.n;
         filter.bias            += filter.n;
         filter.scale           += filter.n;
