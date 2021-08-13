@@ -29,8 +29,7 @@ typedef struct {
     int     depend_num;
 
     int     class_num;
-    int     anchor_num;
-    int     anchor_list[9][2];
+    int     anchor_list[3][2];
     float   ignore_thres, scale_x_y;
 } LAYER;
 

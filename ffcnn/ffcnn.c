@@ -181,14 +181,13 @@ NET* net_load(char *fcfg, char *fweights)
             parse_params(pstart, pend, "ignore_thresh", strval, sizeof(strval)); net->layer_list[layercur].ignore_thres= (float)atof(strval);
             parse_params(pstart, pend, "mask", strval, sizeof(strval));
             for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) masks[i] = atoi(str);
-            net->layer_list[layercur].anchor_num = i;
             parse_params(pstart, pend, "anchors", strval, sizeof(strval));
             for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) {
                 anchors[i][0] = atoi(str);
                 str = strtok(NULL, ",");
                 anchors[i][1] = atoi(str);
             }
-            for (i=0; i<net->layer_list[layercur].anchor_num; i++) {
+            for (i=0; i<3; i++) {
                 net->layer_list[layercur].anchor_list[i][0] = anchors[masks[i]][0];
                 net->layer_list[layercur].anchor_list[i][1] = anchors[masks[i]][1];
             }
@@ -361,7 +360,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     FILTER filter= ilayer->filter;
     int    mwi   = mati.width + mati.pad * 2;
     int    mwo   = mato.width + mato.pad * 2;
-    int    ftotal, ix, iy, ox, oy, i, j, n;
+    int    ftotal, x, y, i, j, n;
     float *datao, *dataf;
 
     mati.channels /= filter.groups;
@@ -376,10 +375,10 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     }
 
     for (n=0; n<filter.groups; n++) {
-        for (iy=0,oy=0; iy<mati.height; iy+=filter.stride,oy++) {
-            for (ix=0,ox=0; ix<mati.width; ix+=filter.stride,ox++) {
+        for (y=0; y<mato.height; y++) {
+            for (x=0; x<mato.width; x++) {
                 im2row(&mati, filter.size, net->cnntempbuf); mati.data += filter.stride;
-                datao = mato.data + (mato.pad + oy) * mwo + mato.pad + ox;
+                datao = mato.data + (mato.pad + y) * mwo + mato.pad + x;
                 for (dataf=filter.data,i=0; i<filter.n; i++) {
                     for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntempbuf[j];
                     if (filter.batchnorm) *datao = (*datao - filter.mean[i]) * filter.norm[i];
@@ -387,9 +386,9 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                     datao += mwo * (mato.height + mato.pad * 2);
                 }
             }
-            mati.data += mwi * filter.stride - ix;
+            mati.data += (mwi - x) * filter.stride;
         }
-        mati.data += mwi * ((mati.height + mati.pad * 2) * mati.channels - iy);
+        mati.data += mwi * ((mati.height + mati.pad * 2) * mati.channels - y * filter.stride);
         mato.data += mwo *  (mato.height + mato.pad * 2) * mato.channels;
         filter.data += filter.n * ftotal;
         filter.bias += filter.n;
