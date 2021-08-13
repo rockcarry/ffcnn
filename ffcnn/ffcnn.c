@@ -360,8 +360,8 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     FILTER filter= ilayer->filter;
     int    mwi   = mati.width + mati.pad * 2;
     int    mwo   = mato.width + mato.pad * 2;
-    int    ftotal, x, y, i, j, n;
-    float *datao, *dataf;
+    int    ftotal, x, y, i, j;
+    float *datao, *dataf, sum;
 
     mati.channels /= filter.groups;
     mato.channels /= filter.groups;
@@ -374,27 +374,37 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
         if (net->cnntempbuf == NULL) { printf("failed to allocate memory for cnntempbuf !"); return; }
     }
 
-    for (n=0; n<filter.groups; n++) {
+    do {
         for (y=0; y<mato.height; y++) {
             for (x=0; x<mato.width; x++) {
                 im2row(&mati, filter.size, net->cnntempbuf); mati.data += filter.stride;
                 datao = mato.data + (mato.pad + y) * mwo + mato.pad + x;
                 for (dataf=filter.data,i=0; i<filter.n; i++) {
-                    for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntempbuf[j];
-                    if (filter.batchnorm) *datao = (*datao - filter.mean[i]) * filter.norm[i];
-                   *datao  = activate(*datao + filter.bias[i], filter.activate);
+                    for (sum = 0, j = 0; j < (ftotal & ~0x7); j += 8, dataf += 8) {
+                        sum += dataf[0] * net->cnntempbuf[j + 0];
+                        sum += dataf[1] * net->cnntempbuf[j + 1];
+                        sum += dataf[2] * net->cnntempbuf[j + 2];
+                        sum += dataf[3] * net->cnntempbuf[j + 3];
+                        sum += dataf[4] * net->cnntempbuf[j + 4];
+                        sum += dataf[5] * net->cnntempbuf[j + 5];
+                        sum += dataf[6] * net->cnntempbuf[j + 6];
+                        sum += dataf[7] * net->cnntempbuf[j + 7];
+                    }
+                    for (; j < ftotal; j++) sum += *dataf++ * net->cnntempbuf[j];
+                    if (filter.batchnorm) sum = (sum - filter.mean[i]) * filter.norm[i];
+                   *datao  = activate(sum + filter.bias[i], filter.activate);
                     datao += mwo * (mato.height + mato.pad * 2);
                 }
             }
-            mati.data += (mwi - x) * filter.stride;
+            mati.data += (mwi - mato.width) * filter.stride;
         }
-        mati.data += mwi * ((mati.height + mati.pad * 2) * mati.channels - y * filter.stride);
-        mato.data += mwo *  (mato.height + mato.pad * 2) * mato.channels;
+        mati.data   += mwi * ((mati.height + mati.pad * 2) * mati.channels - mato.height * filter.stride);
+        mato.data   += mwo *  (mato.height + mato.pad * 2) * mato.channels;
         filter.data += filter.n * ftotal;
         filter.bias += filter.n;
         filter.mean += filter.n;
         filter.norm += filter.n;
-    }
+    } while (--filter.groups);
 }
 
 static float filter_avgmax(float *mat, int mw, int mh, int x, int y, int fsize, int flag)
@@ -431,7 +441,7 @@ static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
             for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=ilayer->filter.stride,ox++) {
                 *datao++ = filter_avgmax(datai, mwi, mhi, ix, iy, ilayer->filter.size, flag);
             }
-            datao += mwo - ox;
+            datao += mwo - olayer->matrix.width;
         }
         datai += (ilayer->matrix.height + ilayer->matrix.pad * 2) * mwi;
         datao += olayer->matrix.pad * 2 * mwo;
@@ -451,8 +461,8 @@ static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
                 *datao++ = *datai;
                 if (++x % ilayer->filter.stride == 0) datai++;
             }
-            datao += mwo - x;
-            datai -= x / ilayer->filter.stride;
+            datao += mwo - olayer->matrix.width;
+            datai -= olayer->matrix.width / ilayer->filter.stride;
             if (++y % ilayer->filter.stride == 0) datai += mwi;
         }
         datao += olayer->matrix.pad * 2 * mwo;
@@ -481,9 +491,9 @@ static void layer_shortcut_forward(NET *net, LAYER *ilayer, LAYER *olayer)
             for (x=0; x<olayer->matrix.width; x++) {
                 *datao++ = activate(*data1++ + *data2++, ilayer->filter.activate);
             }
-            datao += mwo - x;
-            data1 += mw1 - x;
-            data2 += mw2 - x;
+            datao += mwo - olayer->matrix.width;
+            data1 += mw1 - olayer->matrix.width;
+            data2 += mw2 - olayer->matrix.width;
         }
         datao += olayer->matrix.pad * 2 * mwo;
         data1 += ilayer->matrix.pad * 2 * mw1;
