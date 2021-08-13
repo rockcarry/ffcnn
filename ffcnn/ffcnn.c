@@ -134,7 +134,7 @@ NET* net_load(char *fcfg, char *fweights)
             if (net->layer_list[layercur].filter.groups== 0) net->layer_list[layercur].filter.groups= 1;
             net->layer_list[layercur].filter.channels = net->layer_list[layercur].matrix.channels / net->layer_list[layercur].filter.groups;
             net->weight_size += net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.channels * net->layer_list[layercur].filter.n;
-            net->weight_size += net->layer_list[layercur].filter.n * (1 + !!net->layer_list[layercur].filter.batchnorm * 3);
+            net->weight_size += net->layer_list[layercur].filter.n * (1 + !!net->layer_list[layercur].filter.batchnorm * 2);
             net->layer_list[layercur++].type = LAYER_TYPE_CONV;
             calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
@@ -200,21 +200,26 @@ NET* net_load(char *fcfg, char *fweights)
 
     net->weight_buf = malloc(net->weight_size * sizeof(float));
     if (net->weight_buf) {
-        float *pfloat = net->weight_buf; FILE *fp;
-        if ((fp = fopen(fweights, "rb"))) { fseek (fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET); fread (net->weight_buf, 1, net->weight_size * sizeof(float), fp); fclose(fp); }
+        float *pfloat = net->weight_buf; FILE *fp = fopen(fweights, "rb");
+        if (fp) fseek(fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET);
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 FILTER *filter = &net->layer_list[i].filter;
                 filter->bias = pfloat; pfloat += filter->n;
+                if (fp) fread(filter->bias, 1, filter->n * sizeof(float), fp);
                 if (filter->batchnorm) {
-                    filter->scale            = pfloat; pfloat += filter->n;
-                    filter->rolling_mean     = pfloat; pfloat += filter->n;
-                    filter->rolling_variance = pfloat; pfloat += filter->n;
-                    for (j=0; j<filter->n; j++) filter->scale[j] = (float)(filter->scale[j] / sqrt(filter->rolling_variance[j] + 0.00001f));
+                    filter->norm = pfloat; pfloat += filter->n;
+                    filter->mean = pfloat; pfloat += filter->n;
+                    if (fp) fread(filter->norm, 1, filter->n * sizeof(float), fp); // read scale data
+                    if (fp) fread(filter->mean, 1, filter->n * sizeof(float), fp); // read rolling_mean data
+                    if (fp) fread(pfloat      , 1, filter->n * sizeof(float), fp); // read rolling_variance data
+                    for (j=0; j<filter->n; j++) filter->norm[j] = (float)(filter->norm[j] / sqrt(pfloat[j] + 0.00001f));
                 }
                 filter->data = pfloat; pfloat += filter->size * filter->size * filter->channels * filter->n;
+                if (fp) fread(filter->data, 1, filter->size * filter->size * filter->channels * filter->n * sizeof(float), fp);
             }
         }
+        if (fp) fclose(fp);
     }
 
     mat           = &(net->layer_list[0].matrix);
@@ -377,7 +382,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
                 datao = mato.data + (mato.pad + oy) * mwo + mato.pad + ox;
                 for (dataf=filter.data,i=0; i<filter.n; i++) {
                     for (*datao=0,j=0; j<ftotal; j++) *datao += *dataf++ * net->cnntempbuf[j];
-                    if (filter.batchnorm) *datao = (*datao - filter.rolling_mean[i]) * filter.scale[i];
+                    if (filter.batchnorm) *datao = (*datao - filter.mean[i]) * filter.norm[i];
                    *datao  = activate(*datao + filter.bias[i], filter.activate);
                     datao += mwo * (mato.height + mato.pad * 2);
                 }
@@ -386,11 +391,9 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
         }
         mati.data += mwi * ((mati.height + mati.pad * 2) * mati.channels - iy);
         mato.data += mwo *  (mato.height + mato.pad * 2) * mato.channels;
-        filter.data            += filter.n * ftotal;
-        filter.bias            += filter.n;
-        filter.scale           += filter.n;
-        filter.rolling_mean    += filter.n;
-        filter.rolling_variance+= filter.n;
+        filter.data += filter.n * ftotal;
+        filter.bias += filter.n;
+        if (filter.batchnorm) { filter.mean += filter.n; filter.norm += filter.n; }
     }
 }
 

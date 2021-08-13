@@ -8,7 +8,7 @@ typedef struct {
 
 typedef struct {
     int    size, channels, n, stride, groups, batchnorm, activate;
-    float *data, *bias, *scale, *rolling_mean, *rolling_variance;
+    float *data, *bias, *mean, *norm;
 } FILTER;
 
 enum {
