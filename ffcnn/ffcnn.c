@@ -128,13 +128,13 @@ NET* net_load(char *fcfg, char *fweights)
             parse_params(pstart, pend, "stride"  , strval, sizeof(strval)); net->layer_list[layercur].filter.stride= atoi(strval);
             parse_params(pstart, pend, "groups"  , strval, sizeof(strval)); net->layer_list[layercur].filter.groups= atoi(strval);
             parse_params(pstart, pend, "pad"     , strval, sizeof(strval)); net->layer_list[layercur].matrix.pad   = atoi(strval);
-            parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); net->layer_list[layercur].filter.batchnorm = atoi(strval);
+            parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); net->layer_list[layercur].filter.batchnorm = !!atoi(strval);
             parse_params(pstart, pend, "activation"     , strval, sizeof(strval)); net->layer_list[layercur].filter.activate  = get_activation_type_int(strval);
             if (net->layer_list[layercur].filter.stride== 0) net->layer_list[layercur].filter.stride= 1;
             if (net->layer_list[layercur].filter.groups== 0) net->layer_list[layercur].filter.groups= 1;
             net->layer_list[layercur].filter.channels = net->layer_list[layercur].matrix.channels / net->layer_list[layercur].filter.groups;
             net->weight_size += net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.channels * net->layer_list[layercur].filter.n;
-            net->weight_size += net->layer_list[layercur].filter.n * (1 + !!net->layer_list[layercur].filter.batchnorm * 2);
+            net->weight_size += net->layer_list[layercur].filter.n * (1 + net->layer_list[layercur].filter.batchnorm * 2);
             net->layer_list[layercur++].type = LAYER_TYPE_CONV;
             calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
@@ -393,7 +393,8 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
         mato.data += mwo *  (mato.height + mato.pad * 2) * mato.channels;
         filter.data += filter.n * ftotal;
         filter.bias += filter.n;
-        if (filter.batchnorm) { filter.mean += filter.n; filter.norm += filter.n; }
+        filter.mean += filter.n;
+        filter.norm += filter.n;
     }
 }
 
