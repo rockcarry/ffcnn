@@ -1,10 +1,21 @@
 #ifndef _FFCNN_H_
 #define _FFCNN_H_
 
+#define ALIGN(x, n) (((x) + ((n) - 1)) & ~((n) - 1))
+
+enum {
+    ACTIVATE_TYPE_LINEAR ,
+    ACTIVATE_TYPE_RELU   ,
+    ACTIVATE_TYPE_LEAKY  ,
+    ACTIVATE_TYPE_SIGMOID,
+};
+float activate(float x, int type);
+
 typedef struct {
     int    width, height, channels, pad;
     float *data;
 } MATRIX;
+void im2row(MATRIX *matrix, int fsize, float *buf);
 
 typedef struct {
     int    size, channels, n, stride, groups, batchnorm, activate;

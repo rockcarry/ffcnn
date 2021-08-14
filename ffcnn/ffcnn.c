@@ -13,7 +13,14 @@ typedef unsigned long long uint64_t;
 #else
 #include <stdint.h>
 #endif
-#define ALIGN(x, n) (((x) + ((n) - 1)) & ~((n) - 1))
+
+void layer_groupconv_forward_clan(NET *net, LAYER *ilayer, LAYER *olayer);
+void layer_groupconv_forward_sse3(NET *net, LAYER *ilayer, LAYER *olayer);
+#ifdef FFCNN_SSE3
+#define layer_groupconv_forward layer_groupconv_forward_sse3
+#else
+#define layer_groupconv_forward layer_groupconv_forward_clan
+#endif
 
 static char* load_file_to_buffer(char *file)
 {
@@ -320,14 +327,7 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int s1, int s2)
     return j;
 }
 
-enum {
-    ACTIVATE_TYPE_LINEAR ,
-    ACTIVATE_TYPE_RELU   ,
-    ACTIVATE_TYPE_LEAKY  ,
-    ACTIVATE_TYPE_SIGMOID,
-};
-
-static float activate(float x, int type)
+float activate(float x, int type)
 {
     switch (type) {
     case ACTIVATE_TYPE_RELU   : return x > 0 ? x : 0;
@@ -337,7 +337,7 @@ static float activate(float x, int type)
     }
 }
 
-static void im2row(MATRIX *matrix, int fsize, float *buf)
+void im2row(MATRIX *matrix, int fsize, float *buf)
 {
     float *data = matrix->data;
     int    add1 = matrix->width + matrix->pad * 2 - fsize;
@@ -353,7 +353,7 @@ static void im2row(MATRIX *matrix, int fsize, float *buf)
     } while (--n);
 }
 
-static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
+void layer_groupconv_forward_clan(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     MATRIX mati = ilayer->matrix;
     MATRIX mato = olayer->matrix;
@@ -373,7 +373,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     ftsize         = walign + 4;
     if (net->cnnbufsize < walign) {
         net->cnnbufsize = walign;
-        net->cnntempbuf = realloc(net->cnntempbuf, net->cnnbufsize * sizeof(float));
+        free(net->cnntempbuf); net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
         if (net->cnntempbuf == NULL) { printf("failed to allocate memory for cnntempbuf !"); return; }
     }
 
@@ -688,7 +688,7 @@ int main(int argc, char *argv[])
     mynet = net_load(file_cfg, file_weights);
     net_dump(mynet);
     tick = (int)get_tick_count();
-    for (i=0; i<10; i++) {
+    for (i=0; i<100; i++) {
         net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
         net_forward(mynet);
     }
