@@ -252,7 +252,6 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
 
     memset(net->bbox_list, 0, sizeof(BBOX) * net->bbox_num); net->bbox_num = 0;
     mat = &(net->layer_list[0].matrix);
-    if (mat->channels != 3) { printf("invalid input matrix channels: %d !\n", mat->channels); return; }
 
     if (w * mat->height > h * mat->width) {
         sw = mat->width ; sh = mat->width * h / w;
@@ -272,9 +271,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             *p2++ = (bgr[k + 1] - mean[1]) * norm[1]; // g
             *p3++ = (bgr[k + 0] - mean[2]) * norm[2]; // b
         }
-        p1 += (mat->width + mat->pad * 2) - j;
-        p2 += (mat->width + mat->pad * 2) - j;
-        p3 += (mat->width + mat->pad * 2) - j;
+        p1 += (mat->width + mat->pad * 2) - sw;
+        p2 += (mat->width + mat->pad * 2) - sw;
+        p3 += (mat->width + mat->pad * 2) - sw;
     }
 }
 
