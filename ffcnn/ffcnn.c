@@ -13,6 +13,7 @@ typedef unsigned long long uint64_t;
 #else
 #include <stdint.h>
 #endif
+#define ALIGN(x, n) (((x) + ((n) - 1)) & ~((n) - 1))
 
 static char* load_file_to_buffer(char *file)
 {
@@ -104,10 +105,9 @@ typedef struct {
 
 NET* net_load(char *fcfg, char *fweights)
 {
-    char   *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
-    NET    *net    = NULL;
-    MATRIX *mat    = NULL;
-    int     layers, layercur = 0, i, j;
+    char *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
+    NET  *net = NULL; MATRIX *matrix = NULL; FILTER *filter = NULL;
+    int   layers, layercur = 0, ftsize, i, j;
     if (!cfgstr) return NULL;
 
     layers = get_total_layers(cfgstr);
@@ -118,46 +118,46 @@ NET* net_load(char *fcfg, char *fweights)
 
     while (pstart && (pstart = strstr(pstart, "["))) {
         if ((pend = strstr(pstart + 1, "["))) pend = pend - 1;
+        matrix = &net->layer_list[layercur].matrix; filter = &net->layer_list[layercur].filter;
         if (strstr(pstart, "[net]") == pstart) {
             parse_params(pstart, pend, "width"   , strval, sizeof(strval)); net->layer_list[0].matrix.width   = atoi(strval);
             parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].matrix.height  = atoi(strval);
             parse_params(pstart, pend, "channels", strval, sizeof(strval)); net->layer_list[0].matrix.channels= atoi(strval);
         } else if (strstr(pstart, "[conv]") == pstart || strstr(pstart, "[convolutional]") == pstart) {
-            parse_params(pstart, pend, "filters" , strval, sizeof(strval)); net->layer_list[layercur].filter.n     = atoi(strval);
-            parse_params(pstart, pend, "size"    , strval, sizeof(strval)); net->layer_list[layercur].filter.size  = atoi(strval);
-            parse_params(pstart, pend, "stride"  , strval, sizeof(strval)); net->layer_list[layercur].filter.stride= atoi(strval);
-            parse_params(pstart, pend, "groups"  , strval, sizeof(strval)); net->layer_list[layercur].filter.groups= atoi(strval);
-            parse_params(pstart, pend, "pad"     , strval, sizeof(strval)); net->layer_list[layercur].matrix.pad   = atoi(strval);
-            parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); net->layer_list[layercur].filter.batchnorm = !!atoi(strval);
-            parse_params(pstart, pend, "activation"     , strval, sizeof(strval)); net->layer_list[layercur].filter.activate  = get_activation_type_int(strval);
-            if (net->layer_list[layercur].filter.stride== 0) net->layer_list[layercur].filter.stride= 1;
-            if (net->layer_list[layercur].filter.groups== 0) net->layer_list[layercur].filter.groups= 1;
-            net->layer_list[layercur].filter.channels = net->layer_list[layercur].matrix.channels / net->layer_list[layercur].filter.groups;
-            net->weight_size += net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.size * net->layer_list[layercur].filter.channels * net->layer_list[layercur].filter.n;
-            net->weight_size += net->layer_list[layercur].filter.n * (1 + net->layer_list[layercur].filter.batchnorm * 2);
+            parse_params(pstart, pend, "filters" , strval, sizeof(strval)); filter->n     = atoi(strval);
+            parse_params(pstart, pend, "size"    , strval, sizeof(strval)); filter->size  = atoi(strval);
+            parse_params(pstart, pend, "stride"  , strval, sizeof(strval)); filter->stride= atoi(strval);
+            parse_params(pstart, pend, "groups"  , strval, sizeof(strval)); filter->groups= atoi(strval);
+            parse_params(pstart, pend, "pad"     , strval, sizeof(strval)); matrix->pad   = atoi(strval);
+            parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); filter->batchnorm = !!atoi(strval);
+            parse_params(pstart, pend, "activation"     , strval, sizeof(strval)); filter->activate  = get_activation_type_int(strval);
+            if (filter->stride == 0) filter->stride = 1;
+            if (filter->groups == 0) filter->groups = 1;
+            filter->channels  = matrix->channels / filter->groups;
+            net->weight_size += filter->n * (ALIGN(filter->size * filter->size * filter->channels, 4) + 4);
             net->layer_list[layercur++].type = LAYER_TYPE_CONV;
             calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
-            parse_params(pstart, pend, "size"  , strval, sizeof(strval)); net->layer_list[layercur].filter.size  = atoi(strval);
-            parse_params(pstart, pend, "stride", strval, sizeof(strval)); net->layer_list[layercur].filter.stride= atoi(strval);
-            net->layer_list[layercur  ].filter.n = net->layer_list[layercur].matrix.channels;
+            parse_params(pstart, pend, "size"  , strval, sizeof(strval)); filter->size  = atoi(strval);
+            parse_params(pstart, pend, "stride", strval, sizeof(strval)); filter->stride= atoi(strval);
+            net->layer_list[layercur  ].filter.n = matrix->channels;
             net->layer_list[layercur++].type = (strstr(pstart, "[avg") == pstart) ? LAYER_TYPE_AVGPOOL : LAYER_TYPE_MAXPOOL;
             calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
         } else if (strstr(pstart, "[upsample]") == pstart) {
-            parse_params(pstart, pend, "stride" , strval, sizeof(strval)); net->layer_list[layercur].filter.stride = atoi(strval);
-            net->layer_list[layercur+1].matrix.channels = net->layer_list[layercur].matrix.channels;
-            net->layer_list[layercur+1].matrix.width    = net->layer_list[layercur].matrix.width  * net->layer_list[layercur].filter.stride;
-            net->layer_list[layercur+1].matrix.height   = net->layer_list[layercur].matrix.height * net->layer_list[layercur].filter.stride;
-            net->layer_list[layercur++].type = LAYER_TYPE_UPSAMPLE;
+            parse_params(pstart, pend, "stride" , strval, sizeof(strval)); filter->stride = atoi(strval);
+            net->layer_list[layercur + 1].matrix.channels = matrix->channels;
+            net->layer_list[layercur + 1].matrix.width    = matrix->width  * filter->stride;
+            net->layer_list[layercur + 1].matrix.height   = matrix->height * filter->stride;
+            net->layer_list[layercur ++ ].type = LAYER_TYPE_UPSAMPLE;
         } else if (strstr(pstart, "[dropout]") == pstart || strstr(pstart, "[shortcut]") == pstart) {
-            net->layer_list[layercur + 1].matrix.channels = net->layer_list[layercur].matrix.channels;
-            net->layer_list[layercur + 1].matrix.width    = net->layer_list[layercur].matrix.width;
-            net->layer_list[layercur + 1].matrix.height   = net->layer_list[layercur].matrix.height;
+            net->layer_list[layercur + 1].matrix.channels = matrix->channels;
+            net->layer_list[layercur + 1].matrix.width    = matrix->width;
+            net->layer_list[layercur + 1].matrix.height   = matrix->height;
             if (strstr(pstart, "[dropout]") == pstart) {
                 net->layer_list[layercur++].type = LAYER_TYPE_DROPOUT;
             } else {
                 parse_params(pstart, pend, "from"      , strval, sizeof(strval)); net->layer_list[layercur].depend_list[0] = atoi(strval) + layercur;
-                parse_params(pstart, pend, "activation", strval, sizeof(strval)); net->layer_list[layercur].filter.activate= get_activation_type_int(strval);
+                parse_params(pstart, pend, "activation", strval, sizeof(strval)); filter->activate= get_activation_type_int(strval);
                 net->layer_list[layercur  ].depend_num = 1;
                 net->layer_list[layercur++].type = LAYER_TYPE_SHORTCUT;
             }
@@ -197,33 +197,33 @@ NET* net_load(char *fcfg, char *fweights)
     }
     free(cfgstr);
 
-    net->weight_buf = malloc(net->weight_size * sizeof(float));
+    net->weight_buf = calloc(1, net->weight_size * sizeof(float));
     if (net->weight_buf) {
         float *pfloat = net->weight_buf; FILE *fp = fopen(fweights, "rb");
         if (fp) fseek(fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET);
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
-                FILTER *filter = &net->layer_list[i].filter;
-                filter->bias = pfloat; pfloat += filter->n;
-                if (fp) fread(filter->bias, 1, filter->n * sizeof(float), fp);
-                if (filter->batchnorm) {
-                    filter->norm = pfloat; pfloat += filter->n;
-                    filter->mean = pfloat; pfloat += filter->n;
-                    if (fp) fread(filter->norm, 1, filter->n * sizeof(float), fp); // read scale data
-                    if (fp) fread(filter->mean, 1, filter->n * sizeof(float), fp); // read rolling_mean data
-                    if (fp) fread(pfloat      , 1, filter->n * sizeof(float), fp); // read rolling_variance data
-                    for (j=0; j<filter->n; j++) filter->norm[j] = (float)(filter->norm[j] / sqrt(pfloat[j] + 0.00001f));
+                filter = &net->layer_list[i].filter;
+                ftsize = ALIGN(filter->size * filter->size * filter->channels, 4) + 4;
+                filter->data = pfloat; pfloat += filter->n * ftsize;
+                if (fp) {
+                    for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // bias
+                    if (filter->batchnorm) {
+                        for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // scale/norm
+                        for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // rolling_mean
+                        for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
+                        for (j=0; j<filter->n; j++) filter->data[ftsize * j + ftsize - 2] = (float)(filter->data[ftsize * j + ftsize - 2] / sqrt(filter->data[ftsize * j + ftsize - 1] + 0.00001f));
+                    }
+                    for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j, 1, filter->size * filter->size * filter->channels * sizeof(float), fp);
                 }
-                filter->data = pfloat; pfloat += filter->size * filter->size * filter->channels * filter->n;
-                if (fp) fread(filter->data, 1, filter->size * filter->size * filter->channels * filter->n * sizeof(float), fp);
             }
         }
         if (fp) fclose(fp);
     }
 
-    mat           = &(net->layer_list[0].matrix);
-    mat->data     = calloc(1, (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2) * mat->channels * sizeof(float));
-    net->bbox_max = (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2) * mat->channels * sizeof(float) / sizeof(BBOX);
+    matrix        = &(net->layer_list[0].matrix);
+    matrix->data  = calloc(1, (matrix->width + matrix->pad * 2) * (matrix->height + matrix->pad * 2) * matrix->channels * sizeof(float));
+    net->bbox_max = (matrix->width + matrix->pad * 2) * (matrix->height + matrix->pad * 2) * matrix->channels * sizeof(float) / sizeof(BBOX);
     net->bbox_list= (BBOX*)net->layer_list[0].matrix.data;
     if (!net->weight_buf || !net->layer_list[0].matrix.data) { printf("failed to allocate buffers for net_load !\n"); net_free(net); net = NULL; }
     return net;
@@ -355,56 +355,49 @@ static void im2row(MATRIX *matrix, int fsize, float *buf)
 
 static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
-    MATRIX mati  = ilayer->matrix;
-    MATRIX mato  = olayer->matrix;
-    FILTER filter= ilayer->filter;
-    int    mwi   = mati.width + mati.pad * 2;
-    int    mwo   = mato.width + mato.pad * 2;
-    int    ftotal, x, y, i, j;
-    float *datao, *dataf, sum;
+    MATRIX mati = ilayer->matrix;
+    MATRIX mato = olayer->matrix;
+    FILTER fltr = ilayer->filter;
+    int    mwi  = mati.width + mati.pad * 2;
+    int    mhi  = mati.height+ mati.pad * 2;
+    int    mwo  = mato.width + mato.pad * 2;
+    int    mho  = mato.height+ mato.pad * 2;
+    int    walign, ftsize, x, y, i, j;
+    float  sum;
 
-    mati.channels /= filter.groups;
-    mato.channels /= filter.groups;
-    filter.n      /= filter.groups;
-    ftotal         = filter.size * filter.size * filter.channels;
-    if (net->cnnbufsize < ftotal) {
-        net->cnnbufsize = ftotal;
-        if (net->cnntempbuf) free(net->cnntempbuf);
-        net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
+    mato.data     += mato.pad * mwo + mato.pad;
+    mato.channels /= fltr.groups;
+    mati.channels /= fltr.groups;
+    fltr.n        /= fltr.groups;
+    walign         = ALIGN(fltr.size * fltr.size * fltr.channels, 4);
+    ftsize         = walign + 4;
+    if (net->cnnbufsize < walign) {
+        net->cnnbufsize = walign;
+        net->cnntempbuf = realloc(net->cnntempbuf, net->cnnbufsize * sizeof(float));
         if (net->cnntempbuf == NULL) { printf("failed to allocate memory for cnntempbuf !"); return; }
     }
 
     do {
         for (y=0; y<mato.height; y++) {
             for (x=0; x<mato.width; x++) {
-                im2row(&mati, filter.size, net->cnntempbuf); mati.data += filter.stride;
-                datao = mato.data + (mato.pad + y) * mwo + mato.pad + x;
-                for (dataf=filter.data,i=0; i<filter.n; i++) {
-                    for (sum = 0, j = 0; j < (ftotal & ~0x7); j += 8, dataf += 8) {
-                        sum += dataf[0] * net->cnntempbuf[j + 0];
-                        sum += dataf[1] * net->cnntempbuf[j + 1];
-                        sum += dataf[2] * net->cnntempbuf[j + 2];
-                        sum += dataf[3] * net->cnntempbuf[j + 3];
-                        sum += dataf[4] * net->cnntempbuf[j + 4];
-                        sum += dataf[5] * net->cnntempbuf[j + 5];
-                        sum += dataf[6] * net->cnntempbuf[j + 6];
-                        sum += dataf[7] * net->cnntempbuf[j + 7];
+                im2row(&mati, fltr.size, net->cnntempbuf); mati.data += fltr.stride;
+                for (i=0; i<mato.channels; i++) {
+                    for (sum=0,j=0; j<walign; j+=4) {
+                        sum += fltr.data[i * ftsize + j + 0] * net->cnntempbuf[j + 0];
+                        sum += fltr.data[i * ftsize + j + 1] * net->cnntempbuf[j + 1];
+                        sum += fltr.data[i * ftsize + j + 2] * net->cnntempbuf[j + 2];
+                        sum += fltr.data[i * ftsize + j + 3] * net->cnntempbuf[j + 3];
                     }
-                    for (; j < ftotal; j++) sum += *dataf++ * net->cnntempbuf[j];
-                    if (filter.batchnorm) sum = (sum - filter.mean[i]) * filter.norm[i];
-                   *datao  = activate(sum + filter.bias[i], filter.activate);
-                    datao += mwo * (mato.height + mato.pad * 2);
+                    if (fltr.batchnorm) sum = (sum - fltr.data[i * ftsize + walign + 1]) * fltr.data[i * ftsize + walign + 2];
+                    mato.data[i * mwo * mho + y * mwo + x] = activate(sum + fltr.data[i * ftsize + walign + 0], fltr.activate);
                 }
             }
-            mati.data += (mwi - mato.width) * filter.stride;
+            mati.data += (mwi - mato.width) * fltr.stride;
         }
-        mati.data   += mwi * ((mati.height + mati.pad * 2) * mati.channels - mato.height * filter.stride);
-        mato.data   += mwo *  (mato.height + mato.pad * 2) * mato.channels;
-        filter.data += filter.n * ftotal;
-        filter.bias += filter.n;
-        filter.mean += filter.n;
-        filter.norm += filter.n;
-    } while (--filter.groups);
+        mati.data += mwi * (mhi * mati.channels - mato.height * fltr.stride);
+        mato.data += mwo * mho * mato.channels;
+        fltr.data += ftsize * fltr.n;
+    } while (--fltr.groups);
 }
 
 static float filter_avgmax(float *mat, int mw, int mh, int x, int y, int fsize, int flag)
