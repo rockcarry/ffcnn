@@ -8,11 +8,9 @@
 #ifdef _MSC_VER
 #pragma warning(disable:4996)
 #define snprintf _snprintf
+#endif
 typedef int                int32_t;
 typedef unsigned long long uint64_t;
-#else
-#include <stdint.h>
-#endif
 
 void layer_groupconv_forward_clan(NET *net, LAYER *ilayer, LAYER *olayer);
 void layer_groupconv_forward_sse3(NET *net, LAYER *ilayer, LAYER *olayer);
@@ -62,7 +60,7 @@ static char* parse_params(const char *str, const char *end, const char *key, cha
 
     while (*p) {
         if (*p != '=' && *p != ' ') break;
-        else p++;
+        p++;
     }
 
     for (i=0; i<len; i++) {
@@ -75,8 +73,7 @@ static char* parse_params(const char *str, const char *end, const char *key, cha
 
 static int get_activation_type_int(char *str)
 {
-    static const char *STR_TAB[] = { "linear", "relu", "leaky", NULL };
-    int  i;
+    static const char *STR_TAB[] = { "linear", "relu", "leaky", NULL }; int  i;
     for (i=0; STR_TAB[i]; i++) {
         if (strstr(str, STR_TAB[i]) == str) return i;
     }
@@ -264,7 +261,7 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
         sh = mat->height; sw = mat->height* w / h;
         net->s1 = h; net->s2 = sh;
     }
-    linebytes = ((w * 3) + 3) & ~3; // align to 4 bytes
+    linebytes = ALIGN(w * 3, 4); // align to 4 bytes
     p1 = mat->data + (mat->width + mat->pad * 2) * mat->pad + mat->pad;
     p2 = p1 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
     p3 = p2 + (mat->width + mat->pad * 2) * (mat->height + mat->pad * 2);
@@ -400,24 +397,31 @@ void layer_groupconv_forward_clan(NET *net, LAYER *ilayer, LAYER *olayer)
     } while (--fltr.groups);
 }
 
-static float filter_avgmax(float *mat, int mw, int mh, int x, int y, int fsize, int flag)
+static float filter_avgpool(float *mat, int mw, int mh, int x, int y, int fsize)
+{
+    float val = 0; int i, j;
+    mat += y * mw + x;
+    x = x + fsize - 1 < mw ? fsize : mw - x;
+    y = y + fsize - 1 < mh ? fsize : mh - y;
+    for (i=0; i<y; i++) {
+        for (j=0; j<x; j++) val += mat[i * mw + j];
+    }
+    return val / (fsize * fsize);
+}
+
+static float filter_maxpool(float *mat, int mw, int mh, int x, int y, int fsize)
 {
     float val; int i, j;
     mat += y * mw + x;
-    val  = flag ? *mat : 0;
-    for (i=0; i<fsize; i++) {
-        for (j=0; j<fsize; j++,mat++) {
-            if (j + x < mw && i + y < mh) {
-                if (flag) {
-                    if (val < *mat) val = *mat;
-                } else {
-                    val += *mat;
-                }
-            }
+    val  = *mat;
+    x = x + fsize - 1 < mw ? fsize : mw - x;
+    y = y + fsize - 1 < mh ? fsize : mh - y;
+    for (i=0; i<y; i++) {
+        for (j=0; j<x; j++) {
+            if (val < mat[i * mw + j]) val = mat[i * mw + j];
         }
-        mat += mw - j;
     }
-    return flag ? val : val / (fsize * fsize);
+    return val;
 }
 
 static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
@@ -432,7 +436,7 @@ static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
     for (i=0; i<ilayer->matrix.channels; i++) {
         for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=ilayer->filter.stride,oy++) {
             for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=ilayer->filter.stride,ox++) {
-                *datao++ = filter_avgmax(datai, mwi, mhi, ix, iy, ilayer->filter.size, flag);
+                *datao++ = (flag ? filter_maxpool : filter_avgpool)(datai, mwi, mhi, ix, iy, ilayer->filter.size);
             }
             datao += mwo - olayer->matrix.width;
         }
@@ -688,7 +692,7 @@ int main(int argc, char *argv[])
     mynet = net_load(file_cfg, file_weights);
     net_dump(mynet);
     tick = (int)get_tick_count();
-    for (i=0; i<100; i++) {
+    for (i=0; i<10; i++) {
         net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
         net_forward(mynet);
     }
