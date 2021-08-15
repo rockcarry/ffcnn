@@ -3,11 +3,11 @@
 +----------------------------+
 
 ffcnn 是一个 c 语言编写的卷积神经网络前向推理库
-只用了 600 多行代码就实现了完整的 yolov3、yolo-fastest 网络的前向推理
+只用了 500 多行代码就实现了完整的 yolov3、yolo-fastest 网络的前向推理
 不依赖于任何第三方库，在标准 c 环境下就可以编译通过，在 VC、msys2+gcc、ubuntu+gcc
 等多个平台上都可以正确的编译运行
 
-这个代码相对于 darknet、ncnn 来说，性能还没做特殊指令集优化，但代码更加简洁易懂，可以
+这个代码相对于 darknet、ncnn 来说，没做特殊指令集优化，但代码更加简洁易懂，可以
 作为大家学习卷积神经网络的一个参考
 
 
@@ -110,15 +110,26 @@ ffcnn 的特点
 
 ffcnn vs ncnn 性能评测
 ----------------------
-ffcnn 代码：https://github.com/rockcarry/ffcnn
-ncnn + yolo-fastest 代码：https://github.com/rockcarry/ffyolodet
 
-两个代码都是使用的 yolo-fastest-1.1 模型，测试图片都是 test.bmp
-在我自己的 win7 x64 PC + msys2 gcc -O3 测试结果：
-ffcnn: 100 次计算耗时：26224 ms  每帧 262ms  内存占用：4.5MB 左右
-ncnn : 100 次计算耗时： 8424 ms  每帧 84ms   内存占用：45MB  左右
+测试环境：
+1. Intel(R) Core(TM) i5-4250U CPU @ 1.30GHz 1.90GHZ, 8GB RAM
+2. win7 64bit 操作系统 + msys2 + mingw32 + gcc version 10.3.0
+3. ffcnn + yolo-fastest 代码：https://github.com/rockcarry/ffcnn
+4. ncnn  + yolo-fastest 代码：https://github.com/rockcarry/ffyolodet
+5. 测试图片 test.bmp 100 次推理
 
-ncnn 还是比 ffcnn 快很多，大概是 3.1 倍。但是内存占用 ffcnn 少了很多
+测试结果：
++----------+--------------+-------------------+------------------+
+| 测试项目 | ffcnn-v1.2.0 | ncnn with avx off | ncnn with avx on |
++----------+--------------+-------------------+------------------+
+| 耗    时 | 14555ms      | 14649 ms          | 8424 ms          |
++----------+--------------+-------------------+------------------+
+| 内存占用 | 5MB          | 41MB              | 41MB             |
++----------+--------------+-------------------+------------------+
+| 程序体积 | 68KB         | 1.2MB             | 1.2MB            |
++----------+--------------+-------------------+------------------+
+
+可以看到 ffcnn 已经逼近 ncnn（不开启 avx 指令优化）的性能
 
 
 rockcarry@163.com
