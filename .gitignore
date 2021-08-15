@@ -3,6 +3,7 @@
 *.suo
 *.user
 *.exe
+*.o
 out.bmp
 debug/
 Debug/
