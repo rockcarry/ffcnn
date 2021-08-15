@@ -398,26 +398,36 @@ void layer_groupconv_forward_clan(NET *net, LAYER *ilayer, LAYER *olayer)
 
 static float filter_avgpool(float *mat, int mw, int mh, int x, int y, int fsize)
 {
-    float val = 0; int i, j;
-    mat += y * mw + x;
-    x = x + fsize - 1 < mw ? fsize : mw - x;
-    y = y + fsize - 1 < mh ? fsize : mh - y;
-    for (i=0; i<y; i++) {
-        for (j=0; j<x; j++) val += mat[i * mw + j];
+    int xmin, ymin, xmax, ymax; float val = 0;
+    xmin = x - (fsize - 1) / 2;
+    ymin = y - (fsize - 1) / 2;
+    xmax = xmin + fsize;
+    ymax = ymin + fsize;
+    if (xmin < 0 ) xmin = 0;
+    if (ymin < 0 ) ymin = 0;
+    if (xmax > mw) xmax = mw;
+    if (ymax > mh) ymax = mh;
+    for (y=ymin; y<ymax; y++) {
+        for (x=xmin; x<xmax; x++) val += mat[y * mw + x];
     }
     return val / (fsize * fsize);
 }
 
 static float filter_maxpool(float *mat, int mw, int mh, int x, int y, int fsize)
 {
-    float val; int i, j;
-    mat += y * mw + x;
-    val  = *mat;
-    x = x + fsize - 1 < mw ? fsize : mw - x;
-    y = y + fsize - 1 < mh ? fsize : mh - y;
-    for (i=0; i<y; i++) {
-        for (j=0; j<x; j++) {
-            if (val < mat[i * mw + j]) val = mat[i * mw + j];
+    int xmin, ymin, xmax, ymax; float val;
+    xmin = x - (fsize - 1) / 2;
+    ymin = y - (fsize - 1) / 2;
+    xmax = xmin + fsize;
+    ymax = ymin + fsize;
+    if (xmin < 0 ) xmin = 0;
+    if (ymin < 0 ) ymin = 0;
+    if (xmax > mw) xmax = mw;
+    if (ymax > mh) ymax = mh;
+    val = mat[ymin * mw + xmin];
+    for (y=ymin; y<ymax; y++) {
+        for (x=xmin; x<xmax; x++) {
+            if (val < mat[y * mw + x]) val = mat[y * mw + x];
         }
     }
     return val;
