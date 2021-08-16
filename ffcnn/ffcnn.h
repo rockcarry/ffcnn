@@ -20,6 +20,7 @@ enum {
     LAYER_TYPE_SHORTCUT,
     LAYER_TYPE_ROUTE   ,
     LAYER_TYPE_YOLO    ,
+    LAYER_TYPE_TOTOAL  ,
 };
 
 typedef struct {
@@ -50,6 +51,7 @@ typedef struct {
     float *weight_buf;
     float *cnntempbuf;
     int    cnnbufsize;
+    int    timeused[LAYER_TYPE_TOTOAL];
 } NET;
 
 NET* net_load   (char *file1, char *file2);

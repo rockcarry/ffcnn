@@ -13,6 +13,21 @@ typedef int                int32_t;
 typedef unsigned           uint32_t;
 typedef unsigned long long uint64_t;
 
+#ifdef WIN32
+#include <windows.h>
+#define get_tick_count GetTickCount
+#else
+#include <time.h>
+static uint32_t get_tick_count()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
+#endif
+
+#define ENABLE_NET_PROFILE  0
+
 enum {
     ACTIVATE_TYPE_LINEAR ,
     ACTIVATE_TYPE_RELU   ,
@@ -533,8 +548,9 @@ static void layer_yolo_forward(NET *net, LAYER *ilayer)
 
 void net_forward(NET *net)
 {
-    LAYER *ilayer = net->layer_list, *olayer = net->layer_list + 1; int i, j;
+    LAYER *ilayer = net->layer_list, *olayer = net->layer_list + 1; uint32_t tick; int i, j;
     if (!net) return;
+    (void)tick;
     for (i=0; i<net->layer_num; i++) {
         if (net->layer_list[i].depend_num > 0) {
             for (j=0; j<net->layer_list[i].depend_num; j++) {
@@ -548,6 +564,9 @@ void net_forward(NET *net)
             if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
         }
 
+#if ENABLE_NET_PROFILE
+        tick = get_tick_count();
+#endif
         switch (ilayer->type) {
         case LAYER_TYPE_CONV    : layer_groupconv_forward (net, ilayer, olayer); break;
         case LAYER_TYPE_AVGPOOL : layer_avgmaxpool_forward(ilayer, olayer, 0);   break;
@@ -558,7 +577,10 @@ void net_forward(NET *net)
         case LAYER_TYPE_ROUTE   : layer_route_forward     (net, ilayer, olayer); break;
         case LAYER_TYPE_YOLO    : layer_yolo_forward      (net, ilayer);         break;
         }
-
+#if ENABLE_NET_PROFILE
+        tick = (int32_t)get_tick_count() - (int32_t)tick;
+        net->timeused[ilayer->type] += tick;
+#endif
         if (i > 0 && ilayer->refcnt == 0) { free(ilayer->matrix.data); ilayer->matrix.data = NULL; }
         for (j=0; j<ilayer->depend_num; j++) {
             if (--net->layer_list[ilayer->depend_list[j] + 1].refcnt == 0) {
@@ -600,22 +622,10 @@ void net_dump(NET *net)
     }
 }
 
+void net_profile(NET *net) { int i; for (i=0; i<LAYER_TYPE_TOTOAL; i++) printf("%8s: %5d ms\n", get_layer_type_string(i), net->timeused[i]); }
+
 #if 1
 #include "bmpfile.h"
-
-#ifdef WIN32
-#include <windows.h>
-#define get_tick_count GetTickCount
-#else
-#include <time.h>
-static uint32_t get_tick_count()
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-}
-#endif
-
 int main(int argc, char *argv[])
 {
     static const float MEAN[3] = { 0.0f, 0.0f, 0.0f };
@@ -625,11 +635,12 @@ int main(int argc, char *argv[])
     char *file_weights= "yolo-fastest-1.1.weights";
     NET  *mynet       = NULL;
     BMP   mybmp       = {0};
-    int   tick, i;
+    int   tick, n = 10, i;
 
-    if (argc > 1) file_bmp    = argv[1];
-    if (argc > 2) file_cfg    = argv[2];
-    if (argc > 3) file_weights= argv[3];
+    if (argc > 1) n           = atoi(argv[1]);
+    if (argc > 2) file_bmp    = argv[2];
+    if (argc > 3) file_cfg    = argv[3];
+    if (argc > 4) file_weights= argv[4];
     printf("file_bmp    : %s\n", file_bmp    );
     printf("file_cfg    : %s\n", file_cfg    );
     printf("file_weights: %s\n", file_weights);
@@ -638,11 +649,12 @@ int main(int argc, char *argv[])
     mynet = net_load(file_cfg, file_weights);
     net_dump(mynet);
     tick = (int)get_tick_count();
-    for (i=0; i<10; i++) {
+    for (i=0; i<n; i++) {
         net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
         net_forward(mynet);
     }
-    printf("%dms\n", (int)get_tick_count() - (int)tick);
+    printf("%d times inference: %d ms\n", n, (int)get_tick_count() - (int)tick);
+    net_profile(mynet);
     for (i=0; i<mynet->bbox_num; i++) {
         printf("score: %.2f, category: %2d, rect: (%3d %3d %3d %3d)\n", mynet->bbox_list[i].score, mynet->bbox_list[i].type,
             (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2);
