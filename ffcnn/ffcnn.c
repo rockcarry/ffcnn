@@ -31,7 +31,7 @@ static char* load_file_to_buffer(char *file)
     size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
     buf  = malloc(size + 1);
-    if (buf) { fread(buf, 1, size, fp); buf[size] = '\0'; }
+    if (buf) { size = fread(buf, 1, size, fp); buf[size] = '\0'; }
     fclose(fp);
     return buf;
 }
@@ -112,9 +112,10 @@ NET* net_load(char *fcfg, char *fweights)
 {
     char *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
     NET  *net = NULL; MATRIX *matrix = NULL; FILTER *filter = NULL;
-    int   layers, layercur = 0, ftsize, i, j;
+    int   layers, layercur = 0, ftsize, ret, i, j;
     if (!cfgstr) return NULL;
 
+    (void)ret;
     layers = get_total_layers(cfgstr);
     net    = calloc(1, sizeof(NET) + (layers + 1) * sizeof(LAYER));
     pstart = cfgstr;
@@ -212,14 +213,14 @@ NET* net_load(char *fcfg, char *fweights)
                 ftsize = ALIGN(filter->size * filter->size * filter->channels, 4) + 4;
                 filter->data = pfloat; pfloat += filter->n * ftsize;
                 if (fp) {
-                    for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // bias
+                    for (j=0; j<filter->n; j++) ret = fread(filter->data + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // bias
                     if (filter->batchnorm) {
-                        for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // scale/norm
-                        for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // rolling_mean
-                        for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
-                        for (j=0; j<filter->n; j++) filter->data[ftsize * j + ftsize - 2] = (float)(filter->data[ftsize * j + ftsize - 2] / sqrt(filter->data[ftsize * j + ftsize - 1] + 0.00001f));
+                        for (j=0; j<filter->n; j++) ret = fread(filter->data + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // scale/norm
+                        for (j=0; j<filter->n; j++) ret = fread(filter->data + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // rolling_mean
+                        for (j=0; j<filter->n; j++) ret = fread(filter->data + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
+                        for (j=0; j<filter->n; j++) ret = filter->data[ftsize * j + ftsize - 2] = (float)(filter->data[ftsize * j + ftsize - 2] / sqrt(filter->data[ftsize * j + ftsize - 1] + 0.00001f));
                     }
-                    for (j=0; j<filter->n; j++) fread(filter->data + ftsize * j, 1, filter->size * filter->size * filter->channels * sizeof(float), fp);
+                    for (j=0; j<filter->n; j++) ret = fread(filter->data + ftsize * j, 1, filter->size * filter->size * filter->channels * sizeof(float), fp);
                 }
             }
         }
