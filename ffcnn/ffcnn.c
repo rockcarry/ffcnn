@@ -572,34 +572,32 @@ void net_forward(NET *net)
 
 void net_dump(NET *net)
 {
-    int i, j;
+    LAYER *ilayer, *olayer; int i, j;
     if (!net) return;
-    printf("layer   type  filters fltsize  pad/strd input          output       bn/act  ref\n");
+    printf("layer   type  filters fltsize  pad/strd input          output       bn/act\n");
     for (i=0; i<net->layer_num; i++) {
-        if (net->layer_list[i].type == LAYER_TYPE_YOLO) {
-            printf("%3d %8s\n", i, get_layer_type_string(net->layer_list[i].type));
-        } else if (net->layer_list[i].type == LAYER_TYPE_DROPOUT) {
-            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(net->layer_list[i].type), "",
-                net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels);
-        } else if (net->layer_list[i].type == LAYER_TYPE_SHORTCUT || net->layer_list[i].type == LAYER_TYPE_ROUTE) {
+        ilayer = net->layer_list + i + 0;
+        olayer = net->layer_list + i + 1;
+        if (ilayer->type == LAYER_TYPE_YOLO) {
+            printf("%3d %8s class_num: %d ignore_thres: %3.2f [%d, %d] [%d, %d] [%d, %d]\n", i, get_layer_type_string(ilayer->type), ilayer->class_num, ilayer->ignore_thres,
+                ilayer->anchor_list[0][0], ilayer->anchor_list[0][1], ilayer->anchor_list[1][0], ilayer->anchor_list[1][1], ilayer->anchor_list[2][0], ilayer->anchor_list[2][1]);
+        } else if (ilayer->type == LAYER_TYPE_DROPOUT) {
+            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), "", olayer->matrix.width, olayer->matrix.height, olayer->matrix.channels);
+        } else if (ilayer->type == LAYER_TYPE_SHORTCUT || ilayer->type == LAYER_TYPE_ROUTE) {
             char strdeps[256] = "layers:", strnum[16];
-            for (j=0; j<net->layer_list[i].depend_num; j++) {
-                snprintf(strnum, sizeof(strnum), " %d", net->layer_list[i].depend_list[j]);
+            for (j=0; j<ilayer->depend_num; j++) {
+                snprintf(strnum, sizeof(strnum), " %d", ilayer->depend_list[j]);
                 strncat(strdeps, strnum, sizeof(strdeps) - 1);
             }
-            printf("%3d %8s %-38s -> %3dx%3dx%3d           %d\n", i, get_layer_type_string(net->layer_list[i].type), strdeps,
-                net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels, net->layer_list[i].refcnt);
+            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), strdeps,
+                olayer->matrix.width, olayer->matrix.height, olayer->matrix.channels);
         } else {
-            printf("%3d %8s %3d/%3d %2dx%2dx%3d   %d/%2d   %3dx%3dx%3d -> %3dx%3dx%3d  %d/%-6s %d\n", i,
-                get_layer_type_string(net->layer_list[i].type), net->layer_list[i].filter.n, net->layer_list[i].filter.groups,
-                net->layer_list[i].filter.size, net->layer_list[i].filter.size, net->layer_list[i].filter.channels,
-                net->layer_list[i].matrix.pad, net->layer_list[i].filter.stride,
-                net->layer_list[i+0].matrix.width, net->layer_list[i+0].matrix.height, net->layer_list[i+0].matrix.channels,
-                net->layer_list[i+1].matrix.width, net->layer_list[i+1].matrix.height, net->layer_list[i+1].matrix.channels,
-                net->layer_list[i].filter.batchnorm, get_activation_type_string(net->layer_list[i].filter.activate), net->layer_list[i].refcnt);
+            printf("%3d %8s %3d/%3d %2dx%2dx%3d   %d/%2d   %3dx%3dx%3d -> %3dx%3dx%3d  %d/%-6s\n", i, get_layer_type_string(ilayer->type),
+                ilayer->filter.n, ilayer->filter.groups, ilayer->filter.size, ilayer->filter.size, ilayer->filter.channels, ilayer->matrix.pad, ilayer->filter.stride,
+                ilayer->matrix.width, ilayer->matrix.height, ilayer->matrix.channels, olayer->matrix.width, olayer->matrix.height, olayer->matrix.channels,
+                ilayer->filter.batchnorm, get_activation_type_string(ilayer->filter.activate));
         }
     }
-    printf("total weights: %d, total bytes: %d\n", net->weight_size, (int)(sizeof(WEIGHTS_FILE_HEADER) + net->weight_size * sizeof(float)));
 }
 
 #if 1
@@ -640,7 +638,7 @@ int main(int argc, char *argv[])
     mynet = net_load(file_cfg, file_weights);
     net_dump(mynet);
     tick = (int)get_tick_count();
-    for (i=0; i<100; i++) {
+    for (i=0; i<10; i++) {
         net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
         net_forward(mynet);
     }
