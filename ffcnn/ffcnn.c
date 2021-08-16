@@ -337,26 +337,24 @@ static float activate(float x, int type)
 
 static void im2row(MATRIX *matrix, int x, int y, int fsize, float *buf)
 {
+    float *src = matrix->data + (y - matrix->pad) * matrix->width + (x - matrix->pad);
+    int    i, j, k;
     if (matrix->pad == 0 || (x - matrix->pad >= 0 && y - matrix->pad >= 0 && x + matrix->pad < matrix->width && y + matrix->pad < matrix->height)) {
-        float *psrc = matrix->data + (y - matrix->pad) * matrix->width + x - matrix->pad;
-        int    add1 = matrix->width - fsize;
-        int    add2 = matrix->width * (matrix->height - fsize);
-        int    n    = fsize * fsize * matrix->channels;
+        i = fsize * fsize * matrix->channels;
         x = y = 0;
         do {
-            *buf++ = *psrc++;
+            *buf++ = *src++;
             if (++x == fsize) {
-                if (1)            { x = 0; psrc += add1; }
-                if (++y == fsize) { y = 0; psrc += add2; }
+                if (1)            { x = 0; src += matrix->width - fsize; }
+                if (++y == fsize) { y = 0; src += matrix->width * (matrix->height - fsize); }
             }
-        } while (--n);
+        } while (--i);
     } else {
-        float *src = matrix->data + (y - matrix->pad) * matrix->width + (x - matrix->pad);
-        int    i, j, k;
         for (i=0; i<matrix->channels; i++) {
             for (j=0; j<fsize; j++) {
                 for (k=0; k<fsize; k++,src++) {
-                    *buf++ = (k >= matrix->pad - x && k < matrix->pad - x + matrix->width && j >= matrix->pad - y && j < matrix->pad - y + matrix->height) ? *src : 0;
+                    // x - pad + k >= 0 && x - pad + k < w, base on fast range check: a >= 0 && a < b <==> (unsigned)a < (unsigned)b
+                    *buf++ = ((unsigned)(j - matrix->pad + y) < (unsigned)matrix->height && (unsigned)(k - matrix->pad + x) < (unsigned)matrix->width) ? *src : 0;
                 }
                 src += matrix->width - fsize;
             }
