@@ -10,6 +10,7 @@
 #define snprintf _snprintf
 #endif
 typedef int                int32_t;
+typedef unsigned           uint32_t;
 typedef unsigned long long uint64_t;
 
 enum {
