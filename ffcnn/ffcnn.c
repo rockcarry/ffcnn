@@ -344,29 +344,28 @@ static float activate(float x, int type)
 
 static void im2row(float *data, int w, int h, int c, int pad, int fs, int x, int y, float *buf)
 {
-    float *src = data + (y - pad) * w + (x - pad);
-    int    i, j, k;
+    int i, j, k;
+    data += (y - pad) * w + (x - pad);
     if (pad == 0 || (x - pad >= 0 && y - pad >= 0 && x + pad < w && y + pad < h)) {
         i = fs * fs * c;
-        x = y = 0;
+        j = k = 0;
         do {
-            *buf++ = *src++;
-            if (++x == fs) {
-                if (1)         { x = 0; src += w - fs; }
-                if (++y == fs) { y = 0; src += w * (h - fs); }
+            *buf++ = *data++;
+            if (++k == fs) {
+                if (1)         { k = 0; data += w - fs; }
+                if (++j == fs) { j = 0; data += w * (h - fs); }
             }
         } while (--i);
     } else {
-        for (i=0; i<c; i++) {
-            for (j=0; j<fs; j++) {
-                for (k=0; k<fs; k++,src++) {
-                    // x - pad + k >= 0 && x - pad + k < w, base on fast range check: a >= 0 && a < b <==> (unsigned)a < (unsigned)b
-                    *buf++ = ((unsigned)(j - pad + y) < (unsigned)h && (unsigned)(k - pad + x) < (unsigned)w) ? *src : 0;
-                }
-                src += w - fs;
+        i = fs * fs * c;
+        j = k = 0;
+        do {
+            *buf++ = ((unsigned)(j - pad + y) < (unsigned)h && (unsigned)(k - pad + x) < (unsigned)w) ? *data : 0; data++;
+            if (++k == fs) {
+                if (1)         { k = 0; data += w - fs; }
+                if (++j == fs) { j = 0; data += w * (h - fs); }
             }
-            src += w * (h - fs);
-        }
+        } while (--i);
     }
 }
 
