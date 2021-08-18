@@ -108,14 +108,6 @@ static char* get_layer_type_string(int type)
     return (type >= 0 && type <= 7) ? (char*)STR_TAB[type] : "unknown";
 }
 
-static void calculate_output_whcp(LAYER *in, LAYER *out)
-{
-    in ->matrix.pad      = in->matrix.pad ? in->filter.size / 2 : 0;
-    out->matrix.channels = in->filter.n;
-    out->matrix.width    = in->type == LAYER_TYPE_CONV ? (in->matrix.width - in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.width / in->filter.stride;
-    out->matrix.height   = in->type == LAYER_TYPE_CONV ? (in->matrix.height- in->filter.size + in->matrix.pad * 2) / in->filter.stride + 1 : in->matrix.height/ in->filter.stride;
-}
-
 #pragma pack(1)
 typedef struct {
     int32_t  ver_major, ver_minor, ver_revision;
@@ -126,8 +118,8 @@ typedef struct {
 NET* net_load(char *fcfg, char *fweights)
 {
     char *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
-    NET  *net = NULL; MATRIX *matrix = NULL; FILTER *filter = NULL;
-    int   layers, layercur = 0, ftsize, ret, i, j;
+    NET  *net = NULL; LAYER *ilayer = NULL, *olayer = NULL;
+    int   layers = 0, layercur = 0, got_layer, ftsize, ret, i, j;
     if (!cfgstr) return NULL;
 
     (void)ret;
@@ -139,67 +131,68 @@ NET* net_load(char *fcfg, char *fweights)
 
     while (pstart && (pstart = strstr(pstart, "["))) {
         if ((pend = strstr(pstart + 1, "["))) pend = pend - 1;
-        matrix = &net->layer_list[layercur].matrix; filter = &net->layer_list[layercur].filter;
+        ilayer = net->layer_list + layercur; olayer = net->layer_list + layercur + 1;
+        ilayer->stride = ilayer->groups = got_layer = 1;
         if (strstr(pstart, "[net]") == pstart) {
-            parse_params(pstart, pend, "width"   , strval, sizeof(strval)); net->layer_list[0].matrix.width   = atoi(strval);
-            parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].matrix.height  = atoi(strval);
-            parse_params(pstart, pend, "channels", strval, sizeof(strval)); net->layer_list[0].matrix.channels= atoi(strval);
+            parse_params(pstart, pend, "width"   , strval, sizeof(strval)); net->layer_list[0].w = atoi(strval);
+            parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].h = atoi(strval);
+            parse_params(pstart, pend, "channels", strval, sizeof(strval)); net->layer_list[0].c = atoi(strval);
+            got_layer = 0;
         } else if (strstr(pstart, "[conv]") == pstart || strstr(pstart, "[convolutional]") == pstart) {
-            parse_params(pstart, pend, "filters" , strval, sizeof(strval)); filter->n     = atoi(strval);
-            parse_params(pstart, pend, "size"    , strval, sizeof(strval)); filter->size  = atoi(strval);
-            parse_params(pstart, pend, "stride"  , strval, sizeof(strval)); filter->stride= atoi(strval);
-            parse_params(pstart, pend, "groups"  , strval, sizeof(strval)); filter->groups= atoi(strval);
-            parse_params(pstart, pend, "pad"     , strval, sizeof(strval)); matrix->pad   = atoi(strval);
-            parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); filter->batchnorm = !!atoi(strval);
-            parse_params(pstart, pend, "activation"     , strval, sizeof(strval)); filter->activate  = get_activation_type_int(strval);
-            if (filter->stride == 0) filter->stride = 1;
-            if (filter->groups == 0) filter->groups = 1;
-            filter->channels  = matrix->channels / filter->groups;
-            net->weight_size += filter->n * (ALIGN(filter->size * filter->size * filter->channels, 4) + 4);
-            net->layer_list[layercur++].type = LAYER_TYPE_CONV;
-            calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
+            parse_params(pstart, pend, "filters" , strval, sizeof(strval)); ilayer->fn    = atoi(strval);
+            parse_params(pstart, pend, "size"    , strval, sizeof(strval)); ilayer->fs    = atoi(strval);
+            parse_params(pstart, pend, "stride"  , strval, sizeof(strval)); ilayer->stride= atoi(strval) ? atoi(strval) : 1;
+            parse_params(pstart, pend, "groups"  , strval, sizeof(strval)); ilayer->groups= atoi(strval) ? atoi(strval) : 1;
+            parse_params(pstart, pend, "pad"     , strval, sizeof(strval)); ilayer->pad   = atoi(strval);
+            parse_params(pstart, pend, "batch_normalize", strval, sizeof(strval)); ilayer->batchnorm = !!atoi(strval);
+            parse_params(pstart, pend, "activation"     , strval, sizeof(strval)); ilayer->activation= get_activation_type_int(strval);
+            ilayer->pad  = ilayer->pad ? ilayer->fs / 2 : 0;
+            ilayer->type = LAYER_TYPE_CONV;
+            olayer->c    =  ilayer->fn;
+            olayer->w    = (ilayer->w - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
+            olayer->h    = (ilayer->h - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
+            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * ilayer->c, 4) + 4);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
-            parse_params(pstart, pend, "size"  , strval, sizeof(strval)); filter->size  = atoi(strval);
-            parse_params(pstart, pend, "stride", strval, sizeof(strval)); filter->stride= atoi(strval);
-            net->layer_list[layercur  ].filter.n = matrix->channels;
-            net->layer_list[layercur++].type = (strstr(pstart, "[avg") == pstart) ? LAYER_TYPE_AVGPOOL : LAYER_TYPE_MAXPOOL;
-            calculate_output_whcp(net->layer_list + layercur - 1, net->layer_list + layercur);
+            parse_params(pstart, pend, "size"  , strval, sizeof(strval)); ilayer->fs    = atoi(strval);
+            parse_params(pstart, pend, "stride", strval, sizeof(strval)); ilayer->stride= atoi(strval) ? atoi(strval) : 1;
+            ilayer->type = (strstr(pstart, "[avg") == pstart) ? LAYER_TYPE_AVGPOOL : LAYER_TYPE_MAXPOOL;
+            olayer->c    = ilayer->c;
+            olayer->w    = ilayer->w / ilayer->stride;
+            olayer->h    = ilayer->h / ilayer->stride;
         } else if (strstr(pstart, "[upsample]") == pstart) {
-            parse_params(pstart, pend, "stride" , strval, sizeof(strval)); filter->stride = atoi(strval);
-            net->layer_list[layercur + 1].matrix.channels = matrix->channels;
-            net->layer_list[layercur + 1].matrix.width    = matrix->width  * filter->stride;
-            net->layer_list[layercur + 1].matrix.height   = matrix->height * filter->stride;
-            net->layer_list[layercur ++ ].type = LAYER_TYPE_UPSAMPLE;
+            parse_params(pstart, pend, "stride", strval, sizeof(strval)); ilayer->stride= atoi(strval) ? atoi(strval) : 1;
+            ilayer->type = LAYER_TYPE_UPSAMPLE;
+            olayer->c    = ilayer->c;
+            olayer->w    = ilayer->w * ilayer->stride;
+            olayer->h    = ilayer->h * ilayer->stride;
         } else if (strstr(pstart, "[dropout]") == pstart || strstr(pstart, "[shortcut]") == pstart) {
-            net->layer_list[layercur + 1].matrix.channels = matrix->channels;
-            net->layer_list[layercur + 1].matrix.width    = matrix->width;
-            net->layer_list[layercur + 1].matrix.height   = matrix->height;
             if (strstr(pstart, "[dropout]") == pstart) {
-                net->layer_list[layercur++].type = LAYER_TYPE_DROPOUT;
+                ilayer->type = LAYER_TYPE_DROPOUT;
             } else {
-                parse_params(pstart, pend, "from"      , strval, sizeof(strval)); net->layer_list[layercur].depend_list[0] = atoi(strval) + layercur;
-                parse_params(pstart, pend, "activation", strval, sizeof(strval)); filter->activate= get_activation_type_int(strval);
-                net->layer_list[layercur  ].depend_num = 1;
-                net->layer_list[layercur++].type = LAYER_TYPE_SHORTCUT;
+                parse_params(pstart, pend, "from"      , strval, sizeof(strval)); ilayer->depend_list[0] = atoi(strval) + layercur;
+                parse_params(pstart, pend, "activation", strval, sizeof(strval)); ilayer->activation = get_activation_type_int(strval);
+                ilayer->depend_num = 1;
+                ilayer->type = LAYER_TYPE_SHORTCUT;
             }
+            olayer->c = ilayer->c; olayer->w = ilayer->w; olayer->h = ilayer->h;
         } else if (strstr(pstart, "[route]") == pstart) {
             char *str; int dep = 0;
             parse_params(pstart, pend, "layers", strval, sizeof(strval));
             for (i=0; i<4 && (str = strtok(i ? NULL : strval, ",")); i++) {
                 dep = atoi(str);
                 dep = dep > 0 ? dep : layercur + dep;
-                net->layer_list[layercur + 0].depend_list[i]   = dep;
-                net->layer_list[layercur + 1].matrix.channels += net->layer_list[dep + 1].matrix.channels;
-                net->layer_list[layercur + 1].matrix.width     = net->layer_list[dep + 1].matrix.width;
-                net->layer_list[layercur + 1].matrix.height    = net->layer_list[dep + 1].matrix.height;
+                ilayer->depend_list[i] = dep;
+                olayer->c += net->layer_list[dep + 1].c;
+                olayer->w  = net->layer_list[dep + 1].w;
+                olayer->h  = net->layer_list[dep + 1].h;
             }
-            net->layer_list[layercur  ].depend_num = i;
-            net->layer_list[layercur++].type = LAYER_TYPE_ROUTE;
+            ilayer->depend_num = i;
+            ilayer->type = LAYER_TYPE_ROUTE;
         } else if (strstr(pstart, "[yolo]") == pstart) {
             char *str; int masks[9]; int anchors[9][2];
-            parse_params(pstart, pend, "classes"      , strval, sizeof(strval)); net->layer_list[layercur].class_num   = atoi(strval);
-            parse_params(pstart, pend, "scale_x_y"    , strval, sizeof(strval)); net->layer_list[layercur].scale_x_y   = (strcmp(strval, "") == 0) ? 1.0f : (float)atof(strval);
-            parse_params(pstart, pend, "ignore_thresh", strval, sizeof(strval)); net->layer_list[layercur].ignore_thres= (float)atof(strval);
+            parse_params(pstart, pend, "classes"      , strval, sizeof(strval)); ilayer->class_num   = atoi(strval);
+            parse_params(pstart, pend, "scale_x_y"    , strval, sizeof(strval)); ilayer->scale_x_y   = (strcmp(strval, "") == 0) ? 1.0f : (float)atof(strval);
+            parse_params(pstart, pend, "ignore_thresh", strval, sizeof(strval)); ilayer->ignore_thres= (float)atof(strval);
             parse_params(pstart, pend, "mask", strval, sizeof(strval));
             for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) masks[i] = atoi(str);
             parse_params(pstart, pend, "anchors", strval, sizeof(strval));
@@ -209,11 +202,12 @@ NET* net_load(char *fcfg, char *fweights)
                 anchors[i][1] = atoi(str);
             }
             for (i=0; i<3; i++) {
-                net->layer_list[layercur].anchor_list[i][0] = anchors[masks[i]][0];
-                net->layer_list[layercur].anchor_list[i][1] = anchors[masks[i]][1];
+                ilayer->anchor_list[i][0] = anchors[masks[i]][0];
+                ilayer->anchor_list[i][1] = anchors[masks[i]][1];
             }
-            net->layer_list[layercur++].type = LAYER_TYPE_YOLO;
-        }
+            ilayer->type = LAYER_TYPE_YOLO;
+        } else got_layer = 0;
+		if (got_layer) layercur++;
         pstart = pend;
     }
     free(cfgstr);
@@ -224,29 +218,29 @@ NET* net_load(char *fcfg, char *fweights)
         if (fp) fseek(fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET);
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
-                filter = &net->layer_list[i].filter;
-                ftsize = ALIGN(filter->size * filter->size * filter->channels, 4) + 4;
-                filter->data = pfloat; pfloat += filter->n * ftsize;
+                ilayer = net->layer_list + i;
+                ftsize = ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4;
+                ilayer->filter = pfloat; pfloat += ilayer->fn * ftsize;
                 if (fp) {
-                    for (j=0; j<filter->n; j++) ret = (int)fread(filter->data + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // bias
-                    if (filter->batchnorm) {
-                        for (j=0; j<filter->n; j++) ret = (int)fread(filter->data + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // scale/norm
-                        for (j=0; j<filter->n; j++) ret = (int)fread(filter->data + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // rolling_mean
-                        for (j=0; j<filter->n; j++) ret = (int)fread(filter->data + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
-                        for (j=0; j<filter->n; j++) filter->data[ftsize * j + ftsize - 2] = (float)(filter->data[ftsize * j + ftsize - 2] / sqrt(filter->data[ftsize * j + ftsize - 1] + 0.00001f));
+                    for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // bias
+                    if (ilayer->batchnorm) {
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // scale/norm
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // rolling_mean
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
+                        for (j=0; j<ilayer->fn; j++) ilayer->filter[ftsize * j + ftsize - 2] = (float)(ilayer->filter[ftsize * j + ftsize - 2] / sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f));
                     }
-                    for (j=0; j<filter->n; j++) ret = (int)fread(filter->data + ftsize * j, 1, filter->size * filter->size * filter->channels * sizeof(float), fp);
+                    for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j, 1, ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups) * sizeof(float), fp);
                 }
             }
         }
         if (fp) fclose(fp);
     }
 
-    matrix        = &(net->layer_list[0].matrix);
-    matrix->data  = calloc(1, matrix->width * matrix->height * matrix->channels * sizeof(float));
-    net->bbox_max = matrix->width * matrix->height * matrix->channels * sizeof(float) / sizeof(BBOX);
-    net->bbox_list= (BBOX*)net->layer_list[0].matrix.data;
-    if (!net->weight_buf || !net->layer_list[0].matrix.data) { printf("failed to allocate buffers for net_load !\n"); net_free(net); net = NULL; }
+    ilayer        = net->layer_list;
+    ilayer->data  = calloc(1, ilayer->w * ilayer->h * ilayer->c * sizeof(float));
+    net->bbox_max = ilayer->w * ilayer->h * ilayer->c * sizeof(float) / sizeof(BBOX);
+    net->bbox_list= (BBOX*)ilayer->data;
+    if (!net->weight_buf || !ilayer->data) { printf("failed to allocate buffers for net_load !\n"); net_free(net); net = NULL; }
     return net;
 }
 
@@ -254,7 +248,7 @@ void net_free(NET *net)
 {
     int  i;
     if (!net) return;
-    for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].matrix.data);
+    for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].data);
     free(net->cnntempbuf);
     free(net->weight_buf);
     free(net);
@@ -262,25 +256,23 @@ void net_free(NET *net)
 
 void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm)
 {
-    MATRIX *mat = NULL;
+    LAYER *ilayer = net->layer_list;
     int    linebytes, sw, sh, i, j;
     float  *p1, *p2, *p3;
     if (!net) return;
 
     memset(net->bbox_list, 0, sizeof(BBOX) * net->bbox_num); net->bbox_num = 0;
-    mat = &(net->layer_list[0].matrix);
-
-    if (w * mat->height > h * mat->width) {
-        sw = mat->width ; sh = mat->width * h / w;
+    if (w * ilayer->h > h * ilayer->w) {
+        sw = ilayer->w; sh = sw * h / w;
         net->s1 = w; net->s2 = sw;
     } else {
-        sh = mat->height; sw = mat->height* w / h;
+        sh = ilayer->h; sw = sh * w / h;
         net->s1 = h; net->s2 = sh;
     }
     linebytes = ALIGN(w * 3, 4); // align to 4 bytes
-    p1 = mat->data + mat->width * mat->height * 0;
-    p2 = mat->data + mat->width * mat->height * 1;
-    p3 = mat->data + mat->width * mat->height * 2;
+    p1 = ilayer->data + ilayer->w * ilayer->h * 0;
+    p2 = ilayer->data + ilayer->w * ilayer->h * 1;
+    p3 = ilayer->data + ilayer->w * ilayer->h * 2;
     for (i=0; i<sh; i++) {
         for (j=0; j<sw; j++) {
             int x = j * net->s1 / net->s2, y = i * net->s1 / net->s2, k = y * linebytes + x * 3;
@@ -288,9 +280,9 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
             *p2++ = (bgr[k + 1] - mean[1]) * norm[1]; // g
             *p3++ = (bgr[k + 0] - mean[2]) * norm[2]; // b
         }
-        p1 += mat->width - sw;
-        p2 += mat->width - sw;
-        p3 += mat->width - sw;
+        p1 += ilayer->w - sw;
+        p2 += ilayer->w - sw;
+        p3 += ilayer->w - sw;
     }
 }
 
@@ -350,68 +342,68 @@ static float activate(float x, int type)
     }
 }
 
-static void im2row(MATRIX *matrix, int x, int y, int fsize, float *buf)
+static void im2row(float *data, int w, int h, int c, int pad, int fs, int x, int y, float *buf)
 {
-    float *src = matrix->data + (y - matrix->pad) * matrix->width + (x - matrix->pad);
+    float *src = data + (y - pad) * w + (x - pad);
     int    i, j, k;
-    if (matrix->pad == 0 || (x - matrix->pad >= 0 && y - matrix->pad >= 0 && x + matrix->pad < matrix->width && y + matrix->pad < matrix->height)) {
-        i = fsize * fsize * matrix->channels;
+    if (pad == 0 || (x - pad >= 0 && y - pad >= 0 && x + pad < w && y + pad < h)) {
+        i = fs * fs * c;
         x = y = 0;
         do {
             *buf++ = *src++;
-            if (++x == fsize) {
-                if (1)            { x = 0; src += matrix->width - fsize; }
-                if (++y == fsize) { y = 0; src += matrix->width * (matrix->height - fsize); }
+            if (++x == fs) {
+                if (1)         { x = 0; src += w - fs; }
+                if (++y == fs) { y = 0; src += w * (h - fs); }
             }
         } while (--i);
     } else {
-        for (i=0; i<matrix->channels; i++) {
-            for (j=0; j<fsize; j++) {
-                for (k=0; k<fsize; k++,src++) {
+        for (i=0; i<c; i++) {
+            for (j=0; j<fs; j++) {
+                for (k=0; k<fs; k++,src++) {
                     // x - pad + k >= 0 && x - pad + k < w, base on fast range check: a >= 0 && a < b <==> (unsigned)a < (unsigned)b
-                    *buf++ = ((unsigned)(j - matrix->pad + y) < (unsigned)matrix->height && (unsigned)(k - matrix->pad + x) < (unsigned)matrix->width) ? *src : 0;
+                    *buf++ = ((unsigned)(j - pad + y) < (unsigned)h && (unsigned)(k - pad + x) < (unsigned)w) ? *src : 0;
                 }
-                src += matrix->width - fsize;
+                src += w - fs;
             }
-            src += matrix->width * (matrix->height - fsize);
+            src += w * (h - fs);
         }
     }
 }
 
 static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
-    MATRIX mati = ilayer->matrix;
-    MATRIX mato = olayer->matrix;
-    FILTER fltr = ilayer->filter;
-    int    walign, ftsize, x, y, i, j;
-    float  sum;
+    int    walign, ftsize, x, y, g, c, ic, oc, fn, i;
+    float *datai, *datao, *dataf, sum;
 
-    mato.channels /= fltr.groups;
-    mati.channels /= fltr.groups;
-    fltr.n        /= fltr.groups;
-    walign         = ALIGN(fltr.size * fltr.size * fltr.channels, 4);
-    ftsize         = walign + 4;
+    datai  = ilayer->data;
+    datao  = olayer->data;
+    dataf  = ilayer->filter;
+    ic     = ilayer->c / ilayer->groups;
+    oc     = olayer->c / ilayer->groups;
+    fn     = ilayer->fn/ ilayer->groups;
+    walign = ALIGN(ilayer->fs * ilayer->fs * ic, 4);
+    ftsize = walign + 4;
     if (net->cnnbufsize < walign) {
         net->cnnbufsize = walign;
         free(net->cnntempbuf); net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
         if (net->cnntempbuf == NULL) { printf("failed to allocate memory for cnntempbuf !"); return; }
     }
 
-    do {
-        for (y=0; y<mato.height; y++) {
-            for (x=0; x<mato.width; x++) {
-                im2row(&mati, x * fltr.stride, y * fltr.stride, fltr.size, net->cnntempbuf);
-                for (i=0; i<mato.channels; i++) {
-                    for (sum=0,j=0; j<walign; j++) sum += fltr.data[i * ftsize + j] * net->cnntempbuf[j];
-                    if (fltr.batchnorm) sum = (sum - fltr.data[i * ftsize + walign + 1]) * fltr.data[i * ftsize + walign + 2];
-                    mato.data[i * mato.width * mato.height + y * mato.width + x] = activate(sum + fltr.data[i * ftsize + walign + 0], fltr.activate);
+    for (g=0; g<ilayer->groups; g++) {
+        for (y=0; y<olayer->h; y++) {
+            for (x=0; x<olayer->w; x++) {
+                im2row(datai, ilayer->w, ilayer->h, ic, ilayer->pad, ilayer->fs, x * ilayer->stride, y * ilayer->stride, net->cnntempbuf);
+                for (c=0; c<oc; c++) {
+                    for (sum=0,i=0; i<walign; i++) sum += dataf[c * ftsize + i] * net->cnntempbuf[i];
+                    if (ilayer->batchnorm) sum = (sum - dataf[c * ftsize + walign + 1]) * dataf[c * ftsize + walign + 2];
+                    datao[c * olayer->w * olayer->h + y * olayer->w + x] = activate(sum + dataf[c * ftsize + walign + 0], ilayer->activation);
                 }
             }
         }
-        mati.data += mati.width * mati.height * mati.channels;
-        mato.data += mato.width * mato.height * mato.channels;
-        fltr.data += ftsize * fltr.n;
-    } while (--fltr.groups);
+        datai += ilayer->w * ilayer->h * ic;
+        datao += olayer->w * olayer->h * oc;
+        dataf += ftsize * fn;
+    }
 }
 
 static float filter_avgpool(float *mat, int mw, int mh, int x, int y, int fsize)
@@ -454,81 +446,81 @@ static float filter_maxpool(float *mat, int mw, int mh, int x, int y, int fsize)
 static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
 {
     int ix, iy, ox, oy, i;
-    float *datai = ilayer->matrix.data;
-    float *datao = olayer->matrix.data;
-    for (i=0; i<ilayer->matrix.channels; i++) {
-        for (iy=0,oy=0; iy<ilayer->matrix.height; iy+=ilayer->filter.stride,oy++) {
-            for (ix=0,ox=0; ix<ilayer->matrix.width; ix+=ilayer->filter.stride,ox++) {
-                *datao++ = (flag ? filter_maxpool : filter_avgpool)(datai, ilayer->matrix.width, ilayer->matrix.height, ix, iy, ilayer->filter.size);
+    float *datai = ilayer->data;
+    float *datao = olayer->data;
+    for (i=0; i<ilayer->c; i++) {
+        for (iy=0,oy=0; iy<ilayer->h; iy+=ilayer->stride,oy++) {
+            for (ix=0,ox=0; ix<ilayer->w; ix+=ilayer->stride,ox++) {
+                *datao++ = (flag ? filter_maxpool : filter_avgpool)(datai, ilayer->w, ilayer->h, ix, iy, ilayer->fs);
             }
         }
-        datai += ilayer->matrix.width * ilayer->matrix.height;
+        datai += ilayer->w * ilayer->h;
     }
 }
 
 static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
 {
-    float *datai = ilayer->matrix.data;
-    float *datao = olayer->matrix.data;
+    float *datai = ilayer->data;
+    float *datao = olayer->data;
     int    i, x, y;
-    for (i=0; i<ilayer->matrix.channels; i++) {
-        for (y=0; y<olayer->matrix.height;) {
-            for (x=0; x<olayer->matrix.width;) {
+    for (i=0; i<ilayer->c; i++) {
+        for (y=0; y<olayer->h;) {
+            for (x=0; x<olayer->w;) {
                 *datao++ = *datai;
-                if (++x % ilayer->filter.stride == 0) datai++;
+                if (++x % ilayer->stride == 0) datai++;
             }
-            datai -= olayer->matrix.width / ilayer->filter.stride;
-            if (++y % ilayer->filter.stride == 0) datai += ilayer->matrix.width;
+            datai -= olayer->w / ilayer->stride;
+            if (++y % ilayer->stride == 0) datai += ilayer->w;
         }
     }
 }
 
 static void layer_dropout_forward(LAYER *ilayer, LAYER *olayer)
 {
-    olayer->matrix.data = ilayer->matrix.data;
-    ilayer->matrix.data = NULL;
+    olayer->data = ilayer->data;
+    ilayer->data = NULL;
 }
 
 static void layer_shortcut_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     LAYER *slayer = net->layer_list + ilayer->depend_list[0] + 1;
-    int    n = ALIGN(olayer->matrix.width * olayer->matrix.height * olayer->matrix.channels, 4), i;
-    for (i=0; i<n; i++) olayer->matrix.data[i] = activate(ilayer->matrix.data[i] + slayer->matrix.data[i], ilayer->filter.activate);
+    int    n = ALIGN(olayer->w * olayer->h * olayer->c, 4), i;
+    for (i=0; i<n; i++) olayer->data[i] = activate(ilayer->data[i] + slayer->data[i], ilayer->activation);
 }
 
 static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
-    float *datao = olayer->matrix.data; int i;
+    float *datao = olayer->data; int i;
     for (i=0; i<ilayer->depend_num; i++) {
         LAYER *rlayer = net->layer_list + ilayer->depend_list[i] + 1;
-        memcpy(datao, rlayer->matrix.data, rlayer->matrix.width * rlayer->matrix.height * rlayer->matrix.channels * sizeof(float));
-        datao += rlayer->matrix.width * rlayer->matrix.height * rlayer->matrix.channels;
+        memcpy(datao, rlayer->data, rlayer->w * rlayer->h * rlayer->c * sizeof(float));
+        datao += rlayer->w * rlayer->h * rlayer->c;
     }
 }
 
-static float get_matrix_data(MATRIX *mat, int w, int h, int c) { return mat->data[c * mat->width * mat->height + h * mat->width + w]; }
+static float get_layer_data(LAYER *layer, int w, int h, int c) { return layer->data[c * layer->w * layer->h + h * layer->w + w]; }
 
 static void layer_yolo_forward(NET *net, LAYER *ilayer)
 {
     int i, j, k, l; float confidence;
-    for (i=0; i<ilayer->matrix.height; i++) {
-        for (j=0; j<ilayer->matrix.width; j++) {
+    for (i=0; i<ilayer->h; i++) {
+        for (j=0; j<ilayer->w; j++) {
             for (k=0; k<3; k++) {
                 int dstart = k * (4 + 1 + ilayer->class_num), cindex = 0;
-                float bs = get_matrix_data(&ilayer->matrix, j, i, dstart + 4);
-                float cs = get_matrix_data(&ilayer->matrix, j, i, dstart + 5);
+                float bs = get_layer_data(ilayer, j, i, dstart + 4);
+                float cs = get_layer_data(ilayer, j, i, dstart + 5);
                 for (l=1; l<ilayer->class_num; l++) {
-                    float val = get_matrix_data(&ilayer->matrix, j, i, dstart + 5 + l);
+                    float val = get_layer_data(ilayer, j, i, dstart + 5 + l);
                     if (cs < val) { cs = val; cindex = l; }
                 }
                 confidence = 1.0f / ((1.0f + (float)exp(-bs) * (1.0f + (float)exp(-cs))));
                 if (confidence >= ilayer->ignore_thres) {
-                    float tx = get_matrix_data(&ilayer->matrix, j, i, dstart + 0);
-                    float ty = get_matrix_data(&ilayer->matrix, j, i, dstart + 1);
-                    float tw = get_matrix_data(&ilayer->matrix, j, i, dstart + 2);
-                    float th = get_matrix_data(&ilayer->matrix, j, i, dstart + 3);
-                    float bbox_cx = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.width / ilayer->matrix.width ;
-                    float bbox_cy = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].matrix.height/ ilayer->matrix.height;
+                    float tx = get_layer_data(ilayer, j, i, dstart + 0);
+                    float ty = get_layer_data(ilayer, j, i, dstart + 1);
+                    float tw = get_layer_data(ilayer, j, i, dstart + 2);
+                    float th = get_layer_data(ilayer, j, i, dstart + 3);
+                    float bbox_cx = (j + activate(tx, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].w / ilayer->w ;
+                    float bbox_cy = (i + activate(ty, ACTIVATE_TYPE_SIGMOID)) * net->layer_list[0].h / ilayer->h;
                     float bbox_w  = (float)exp(tw) * ilayer->anchor_list[k][0] * ilayer->scale_x_y;
                     float bbox_h  = (float)exp(th) * ilayer->anchor_list[k][1] * ilayer->scale_x_y;
                     if (net->bbox_num < net->bbox_max) {
@@ -559,9 +551,9 @@ void net_forward(NET *net)
         }
     }
     for (i=0; i<net->layer_num; i++,ilayer++,olayer++) {
-        if (!olayer->matrix.data && ilayer->type != LAYER_TYPE_DROPOUT && ilayer->type != LAYER_TYPE_YOLO) {
-            olayer->matrix.data = malloc(ALIGN(olayer->matrix.width * olayer->matrix.height * olayer->matrix.channels, 4) * sizeof(float));
-            if (!olayer->matrix.data) { printf("failed to allocate memory for output layer !\n"); return; }
+        if (!olayer->data && ilayer->type != LAYER_TYPE_DROPOUT && ilayer->type != LAYER_TYPE_YOLO) {
+            olayer->data = malloc(ALIGN(olayer->w * olayer->h * olayer->c, 4) * sizeof(float));
+            if (!olayer->data) { printf("failed to allocate memory for output layer !\n"); return; }
         }
 
 #if ENABLE_NET_PROFILE
@@ -581,11 +573,11 @@ void net_forward(NET *net)
         tick = (int32_t)get_tick_count() - (int32_t)tick;
         net->timeused[ilayer->type] += tick;
 #endif
-        if (i > 0 && ilayer->refcnt == 0) { free(ilayer->matrix.data); ilayer->matrix.data = NULL; }
+        if (i > 0 && ilayer->refcnt == 0) { free(ilayer->data); ilayer->data = NULL; }
         for (j=0; j<ilayer->depend_num; j++) {
             if (--net->layer_list[ilayer->depend_list[j] + 1].refcnt == 0) {
-                free(net->layer_list[ilayer->depend_list[j] + 1].matrix.data);
-                net->layer_list[ilayer->depend_list[j] + 1].matrix.data = NULL;
+                free(net->layer_list[ilayer->depend_list[j] + 1].data);
+                net->layer_list[ilayer->depend_list[j] + 1].data = NULL;
             }
         }
     }
@@ -604,20 +596,18 @@ void net_dump(NET *net)
             printf("%3d %8s class_num: %d ignore_thres: %3.2f [%d, %d] [%d, %d] [%d, %d]\n", i, get_layer_type_string(ilayer->type), ilayer->class_num, ilayer->ignore_thres,
                 ilayer->anchor_list[0][0], ilayer->anchor_list[0][1], ilayer->anchor_list[1][0], ilayer->anchor_list[1][1], ilayer->anchor_list[2][0], ilayer->anchor_list[2][1]);
         } else if (ilayer->type == LAYER_TYPE_DROPOUT) {
-            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), "", olayer->matrix.width, olayer->matrix.height, olayer->matrix.channels);
+            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), "", olayer->w, olayer->h, olayer->c);
         } else if (ilayer->type == LAYER_TYPE_SHORTCUT || ilayer->type == LAYER_TYPE_ROUTE) {
             char strdeps[256] = "layers:", strnum[16];
             for (j=0; j<ilayer->depend_num; j++) {
                 snprintf(strnum, sizeof(strnum), " %d", ilayer->depend_list[j]);
                 strncat(strdeps, strnum, sizeof(strdeps) - 1);
             }
-            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), strdeps,
-                olayer->matrix.width, olayer->matrix.height, olayer->matrix.channels);
+            printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), strdeps, olayer->w, olayer->h, olayer->c);
         } else {
             printf("%3d %8s %3d/%3d %2dx%2dx%3d   %d/%2d   %3dx%3dx%3d -> %3dx%3dx%3d  %d/%-6s\n", i, get_layer_type_string(ilayer->type),
-                ilayer->filter.n, ilayer->filter.groups, ilayer->filter.size, ilayer->filter.size, ilayer->filter.channels, ilayer->matrix.pad, ilayer->filter.stride,
-                ilayer->matrix.width, ilayer->matrix.height, ilayer->matrix.channels, olayer->matrix.width, olayer->matrix.height, olayer->matrix.channels,
-                ilayer->filter.batchnorm, get_activation_type_string(ilayer->filter.activate));
+                ilayer->fn, ilayer->groups, ilayer->fs, ilayer->fs, ilayer->c / ilayer->groups, ilayer->pad, ilayer->stride, ilayer->w, ilayer->h, ilayer->c,
+                olayer->w, olayer->h, olayer->c, ilayer->batchnorm, get_activation_type_string(ilayer->activation));
         }
     }
 }

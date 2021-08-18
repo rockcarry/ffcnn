@@ -1,16 +1,6 @@
 #ifndef _FFCNN_H_
 #define _FFCNN_H_
 
-typedef struct {
-    int    width, height, channels, pad;
-    float *data;
-} MATRIX;
-
-typedef struct {
-    int    size, channels, n, stride, groups, batchnorm, activate;
-    float *data; // data stores n * (align(weights, 4), align((bias, mean, norm), 4))
-} FILTER;
-
 enum {
     LAYER_TYPE_CONV    ,
     LAYER_TYPE_AVGPOOL ,
@@ -25,8 +15,9 @@ enum {
 
 typedef struct {
     int     type, refcnt;
-    MATRIX  matrix;
-    FILTER  filter;
+    float  *data, *filter;
+    int     w, h, c, pad, stride, fn, fs, groups;
+    int     batchnorm, activation;
     int     depend_list[4];
     int     depend_num;
 
