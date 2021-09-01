@@ -344,18 +344,20 @@ static float activate(float x, int type)
     }
 }
 
-static void im2row(float *img, int w, int h, int c, int pad, int fs, int stride, int y, float *buf)
+static void im2row(float *img, int w, int h, int c, int pad, int fs, int stride, int walign, int y, float *buf)
 {
-    int  i, j, k, x;
+    float *src = img + (y - pad) * w - pad, *dst = buf;
+    int    i, j, k, x;
     for (i=0; i<c; i++) {
         for (j=0; j<fs; j++) {
-            float *src = img + i * w * h + (y - pad + j) * w - pad;
-            float *dst = buf + i * fs * fs + j * fs;
+            float *tmp = dst;
             for (x=0; x<w; x+=stride) {
                 for (k=0; k<fs; k++) dst[k] = (unsigned)(x - pad + k) < (unsigned)w && (unsigned)(y - pad + j) < (unsigned)h ? src[k] : 0;
-                src += stride, dst += ALIGN(c * fs * fs, 4);
+                src += stride, dst += walign;
             }
+            src += w - x, dst = tmp + fs;
         }
+        src += w * (h - fs);
     }
 }
 
@@ -380,7 +382,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 
     for (g=0; g<ilayer->groups; g++) {
         for (y=0; y<olayer->h; y++) {
-            im2row(datai, ilayer->w, ilayer->h, ic, ilayer->pad, ilayer->fs, ilayer->stride, y * ilayer->stride, net->cnntempbuf);
+            im2row(datai, ilayer->w, ilayer->h, ic, ilayer->pad, ilayer->fs, ilayer->stride, walign, y * ilayer->stride, net->cnntempbuf);
             for (x=0; x<olayer->w; x++) {
                 for (c=0; c<oc; c++) {
                     for (sum=0,i=0; i<walign; i++) sum += dataf[c * ftsize + i] * net->cnntempbuf[x * walign + i];
