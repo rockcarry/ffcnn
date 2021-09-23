@@ -295,7 +295,7 @@ static int bbox_cmp(const void *p1, const void *p2)
     else return 0;
 }
 
-static int nms(BBOX *bboxlist, int n, float threshold, int min, int s1, int s2)
+static int nms(BBOX *bboxlist, int n, float threshold, int min, int scale1, int scale2)
 {
     int i, j, c;
     if (!bboxlist || !n) return 0;
@@ -324,10 +324,10 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int s1, int s2)
         if (bboxlist[i].score) {
             bboxlist[j  ].score= bboxlist[i].score;
             bboxlist[j  ].type = bboxlist[i].type;
-            bboxlist[j  ].x1   = bboxlist[i].x1 * s1 / s2;
-            bboxlist[j  ].y1   = bboxlist[i].y1 * s1 / s2;
-            bboxlist[j  ].x2   = bboxlist[i].x2 * s1 / s2;
-            bboxlist[j++].y2   = bboxlist[i].y2 * s1 / s2;
+            bboxlist[j  ].x1   = bboxlist[i].x1 * scale1 / scale2;
+            bboxlist[j  ].y1   = bboxlist[i].y1 * scale1 / scale2;
+            bboxlist[j  ].x2   = bboxlist[i].x2 * scale1 / scale2;
+            bboxlist[j++].y2   = bboxlist[i].y2 * scale1 / scale2;
         }
     }
     memset(bboxlist + j, 0, sizeof(BBOX) * (n - j));
@@ -489,7 +489,7 @@ static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     }
 }
 
-static float get_layer_data(LAYER *layer, int w, int h, int c) { return layer->data[c * layer->w * layer->h + h * layer->w + w]; }
+static float get_layer_data(LAYER *layer, int x, int y, int i) { return layer->data[i * layer->w * layer->h + y * layer->w + x]; }
 
 static void layer_yolo_forward(NET *net, LAYER *ilayer)
 {
