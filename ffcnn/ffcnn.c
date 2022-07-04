@@ -483,8 +483,9 @@ static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     float *datao = olayer->data; int i;
     for (i=0; i<ilayer->depend_num; i++) {
         LAYER *rlayer = net->layer_list + ilayer->depend_list[i] + 1;
-        memcpy(datao, rlayer->data, rlayer->w * rlayer->h * rlayer->c * sizeof(float));
-        datao += rlayer->w * rlayer->h * rlayer->c;
+        int    n      = ALIGN(rlayer->w * rlayer->h * rlayer->c, 4);
+        memcpy(datao, rlayer->data, n * sizeof(float));
+        datao += n;
     }
 }
 
