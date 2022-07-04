@@ -454,14 +454,13 @@ static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
     float *datai = ilayer->data;
     float *datao = olayer->data;
     int    i, x, y;
-    for (i=0; i<ilayer->c; i++) {
+    for (i=0; i<olayer->c; i++) {
         for (y=0; y<olayer->h;) {
             for (x=0; x<olayer->w;) {
                 *datao++ = *datai;
                 if (++x % ilayer->stride == 0) datai++;
             }
-            datai -= olayer->w / ilayer->stride;
-            if (++y % ilayer->stride == 0) datai += ilayer->w;
+            if (++y % ilayer->stride != 0) datai -= ilayer->w;
         }
     }
 }
