@@ -117,7 +117,7 @@ typedef struct {
 } WEIGHTS_FILE_HEADER;
 #pragma pack()
 
-NET* net_load(char *fcfg, char *fweights)
+NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
 {
     char *cfgstr = load_file_to_buffer(fcfg), *pstart, *pend, strval[256];
     NET  *net = NULL; LAYER *ilayer = NULL, *olayer = NULL;
@@ -136,8 +136,8 @@ NET* net_load(char *fcfg, char *fweights)
         ilayer = net->layer_list + layercur; olayer = net->layer_list + layercur + 1;
         ilayer->stride = ilayer->groups = got_layer = 1;
         if (strstr(pstart, "[net]") == pstart) {
-            parse_params(pstart, pend, "width"   , strval, sizeof(strval)); net->layer_list[0].w = atoi(strval);
-            parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].h = atoi(strval);
+            parse_params(pstart, pend, "width"   , strval, sizeof(strval)); net->layer_list[0].w = inputw ? ALIGN(inputw, 32) : atoi(strval);
+            parse_params(pstart, pend, "height"  , strval, sizeof(strval)); net->layer_list[0].h = inputh ? ALIGN(inputh, 32) : atoi(strval);
             parse_params(pstart, pend, "channels", strval, sizeof(strval)); net->layer_list[0].c = atoi(strval);
             got_layer = 0;
         } else if (strstr(pstart, "[conv]") == pstart || strstr(pstart, "[convolutional]") == pstart) {
@@ -627,7 +627,7 @@ int main(int argc, char *argv[])
     printf("file_weights: %s\n", file_weights);
 
     if (0 != bmp_load(&mybmp, file_bmp)) { printf("failed to load bmp file: %s !\n", file_bmp); return -1; }
-    mynet = net_load(file_cfg, file_weights);
+    mynet = net_load(file_cfg, file_weights, mybmp.width, mybmp.height);
     net_dump(mynet);
     tick = (int)get_tick_count();
     for (i=0; i<n; i++) {

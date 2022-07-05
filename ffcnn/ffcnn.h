@@ -45,7 +45,7 @@ typedef struct {
     int    timeused[LAYER_TYPE_TOTOAL];
 } NET;
 
-NET* net_load   (char *file1, char *file2);
+NET* net_load   (char *file1, char *file2, int inputw, int inputh);
 void net_free   (NET *net);
 void net_input  (NET *net, unsigned char *bgr, int w, int h, float *mean, float *norm);
 void net_forward(NET *net);
