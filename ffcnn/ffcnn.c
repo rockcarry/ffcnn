@@ -153,7 +153,7 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
             olayer->c    =  ilayer->fn;
             olayer->w    = (ilayer->w - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
             olayer->h    = (ilayer->h - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
-            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4);
+            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 2); // extra 2 floats to store the scale & bias
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
             parse_params(pstart, pend, "size"  , strval, sizeof(strval)); ilayer->fs    = atoi(strval);
             parse_params(pstart, pend, "stride", strval, sizeof(strval)); ilayer->stride= atoi(strval) ? atoi(strval) : 1;
@@ -221,15 +221,22 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 ilayer = net->layer_list + i;
-                ftsize = ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4;
+                ftsize = ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 2;
                 ilayer->filter = pfloat; pfloat += ilayer->fn * ftsize;
                 if (fp) {
-                    for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // bias
+                    for (j=0; j<ilayer->fn; j++) {
+                        ilayer->filter[ftsize * j + ftsize - 2] = 1.0; // scale
+                        ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // bias
+                    }
                     if (ilayer->batchnorm) {
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // scale/norm
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // rolling_mean
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
-                        for (j=0; j<ilayer->fn; j++) ilayer->filter[ftsize * j + ftsize - 2] = (float)(ilayer->filter[ftsize * j + ftsize - 2] / sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f));
+                        float scale[ilayer->fn], rolling_mean[ilayer->fn], rolling_variance[ilayer->fn];
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(scale + j           , 1, sizeof(float), fp); // scale
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(rolling_mean + j    , 1, sizeof(float), fp); // rolling_mean
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(rolling_variance + j, 1, sizeof(float), fp); // rolling_variance
+                        for (j=0; j<ilayer->fn; j++) {
+                            ilayer->filter[ftsize * j + ftsize - 2] = scale[j] / sqrt(rolling_variance[j] + 0.00001f); // scale
+                            ilayer->filter[ftsize * j + ftsize - 1]-= rolling_mean[j] * scale[j] / sqrt(rolling_variance[j] + 0.00001f); // bias
+                        }
                     }
                     for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j, 1, ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups) * sizeof(float), fp);
                 }
@@ -373,7 +380,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     oc     = olayer->c / ilayer->groups;
     fn     = ilayer->fn/ ilayer->groups;
     walign = ALIGN(ilayer->fs * ilayer->fs * ic, 4);
-    ftsize = walign + 4;
+    ftsize = walign + 2;
     if (net->cnnbufsize < walign * olayer->w) {
         net->cnnbufsize = walign * olayer->w;
         free(net->cnntempbuf); net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
@@ -386,8 +393,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
             for (x=0; x<olayer->w; x++) {
                 for (c=0; c<oc; c++) {
                     for (sum=0,i=0; i<walign; i++) sum += dataf[c * ftsize + i] * net->cnntempbuf[x * walign + i];
-                    if (ilayer->batchnorm) sum = (sum - dataf[c * ftsize + walign + 1]) * dataf[c * ftsize + walign + 2];
-                    datao[c * olayer->w * olayer->h + y * olayer->w + x] = activate(sum + dataf[c * ftsize + walign + 0], ilayer->activation);
+                    datao[c * olayer->w * olayer->h + y * olayer->w + x] = activate(sum * dataf[c * ftsize + walign + 0] + dataf[c * ftsize + walign + 1], ilayer->activation);
                 }
             }
         }

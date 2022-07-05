@@ -26,7 +26,7 @@ upsample 层和 yolo 层这几种类型。因此要实现起来还是比较容�
 4. 要搞明白什么是分组卷积
 5. 卷积运算每个输出的点，都要经过激活函数
 6. 卷积层如果有归一化操作（batch_normalize），其计算方法：
-   x  = (x + rolling_mean) / sqrt(rolling_variance + 0.00001f)
+   x  = (x - rolling_mean) / sqrt(rolling_variance + 0.00001f)
    x *= scale;
    x += bias;
    x  = activate(x, type);
