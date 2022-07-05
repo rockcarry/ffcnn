@@ -480,7 +480,7 @@ static void layer_dropout_forward(LAYER *ilayer, LAYER *olayer)
 static void layer_shortcut_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     LAYER *slayer = net->layer_list + ilayer->depend_list[0] + 1;
-    int    n = ALIGN(olayer->w * olayer->h * olayer->c, 4), i;
+    int    n = olayer->w * olayer->h * olayer->c, i;
     for (i=0; i<n; i++) olayer->data[i] = activate(ilayer->data[i] + slayer->data[i], ilayer->activation);
 }
 
@@ -489,7 +489,7 @@ static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     float *datao = olayer->data; int i;
     for (i=0; i<ilayer->depend_num; i++) {
         LAYER *rlayer = net->layer_list + ilayer->depend_list[i] + 1;
-        int    n      = ALIGN(rlayer->w * rlayer->h * rlayer->c, 4);
+        int    n      = rlayer->w * rlayer->h * rlayer->c;
         memcpy(datao, rlayer->data, n * sizeof(float));
         datao += n;
     }
@@ -549,7 +549,7 @@ void net_forward(NET *net)
     }
     for (i=0; i<net->layer_num; i++,ilayer++,olayer++) {
         if (!olayer->data && ilayer->type != LAYER_TYPE_DROPOUT && ilayer->type != LAYER_TYPE_YOLO) {
-            olayer->data = malloc(ALIGN(olayer->w * olayer->h * olayer->c, 4) * sizeof(float));
+            olayer->data = malloc(olayer->w * olayer->h * olayer->c * sizeof(float));
             if (!olayer->data) { printf("failed to allocate memory for output layer !\n"); return; }
         }
 
