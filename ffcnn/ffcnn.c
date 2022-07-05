@@ -153,7 +153,7 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
             olayer->c    =  ilayer->fn;
             olayer->w    = (ilayer->w - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
             olayer->h    = (ilayer->h - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
-            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * ilayer->c, 4) + 4);
+            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4);
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
             parse_params(pstart, pend, "size"  , strval, sizeof(strval)); ilayer->fs    = atoi(strval);
             parse_params(pstart, pend, "stride", strval, sizeof(strval)); ilayer->stride= atoi(strval) ? atoi(strval) : 1;
