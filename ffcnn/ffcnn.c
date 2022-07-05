@@ -225,17 +225,17 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
                 ilayer->filter = pfloat; pfloat += ilayer->fn * ftsize;
                 if (fp) {
                     for (j=0; j<ilayer->fn; j++) {
-                        ilayer->filter[ftsize * j + ftsize - 2] = 1.0; // scale
-                        ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // bias
+                        ilayer->filter[ftsize * j + ftsize - 4] = 1.0; // scale
+                        ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // bias
                     }
                     if (ilayer->batchnorm) {
-                        float scale[ilayer->fn], rolling_mean[ilayer->fn], rolling_variance[ilayer->fn];
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(scale + j           , 1, sizeof(float), fp); // scale
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(rolling_mean + j    , 1, sizeof(float), fp); // rolling_mean
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(rolling_variance + j, 1, sizeof(float), fp); // rolling_variance
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // scale
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // rolling_mean
+                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
                         for (j=0; j<ilayer->fn; j++) {
-                            ilayer->filter[ftsize * j + ftsize - 2] = scale[j] / sqrt(rolling_variance[j] + 0.00001f); // scale
-                            ilayer->filter[ftsize * j + ftsize - 1]-= rolling_mean[j] * scale[j] / sqrt(rolling_variance[j] + 0.00001f); // bias
+                            ilayer->filter[ftsize * j + ftsize - 3] -= ilayer->filter[ftsize * j + ftsize - 2] * ilayer->filter[ftsize * j + ftsize - 4]
+                                                                     / sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f);
+                            ilayer->filter[ftsize * j + ftsize - 4] /= sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f);
                         }
                     }
                     for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j, 1, ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups) * sizeof(float), fp);
