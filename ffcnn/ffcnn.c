@@ -153,7 +153,7 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
             olayer->c    =  ilayer->fn;
             olayer->w    = (ilayer->w - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
             olayer->h    = (ilayer->h - ilayer->fs + ilayer->pad * 2) / ilayer->stride + 1;
-            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 2); // extra 2 floats to store the scale & bias
+            net->weight_size += ilayer->fn * (ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4); // extra 2 floats to store the scale & bias
         } else if (strstr(pstart, "[avg]") == pstart || strstr(pstart, "[avgpool]") == pstart || strstr(pstart, "[max]") == pstart || strstr(pstart, "[maxpool]") == pstart) {
             parse_params(pstart, pend, "size"  , strval, sizeof(strval)); ilayer->fs    = atoi(strval);
             parse_params(pstart, pend, "stride", strval, sizeof(strval)); ilayer->stride= atoi(strval) ? atoi(strval) : 1;
@@ -221,7 +221,7 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
         for (i=0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 ilayer = net->layer_list + i;
-                ftsize = ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 2;
+                ftsize = ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4;
                 ilayer->filter = pfloat; pfloat += ilayer->fn * ftsize;
                 if (fp) {
                     for (j=0; j<ilayer->fn; j++) {
@@ -380,7 +380,7 @@ static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     oc     = olayer->c / ilayer->groups;
     fn     = ilayer->fn/ ilayer->groups;
     walign = ALIGN(ilayer->fs * ilayer->fs * ic, 4);
-    ftsize = walign + 2;
+    ftsize = walign + 4;
     if (net->cnnbufsize < walign * olayer->w) {
         net->cnnbufsize = walign * olayer->w;
         free(net->cnntempbuf); net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
