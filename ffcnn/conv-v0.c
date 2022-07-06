@@ -17,9 +17,9 @@ void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
     ftsize = walign + 4;
 
     for (g=0; g<ilayer->groups; g++) {
-        for (c=0; c<oc; c++) {
-            for (y=0; y<olayer->h; y++) {
-                for (x=0; x<olayer->w; x++) {
+        for (y=0; y<olayer->h; y++) {
+            for (x=0; x<olayer->w; x++) {
+                for (c=0; c<oc; c++) {
                     for (sum=0,i=0; i<ic; i++) {
                         for (j=0; j<ilayer->fs; j++) {
                             for (k=0; k<ilayer->fs; k++) {
