@@ -3,6 +3,7 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
+#include "conv.h"
 #include "ffcnn.h"
 
 #ifdef _MSC_VER
@@ -36,7 +37,6 @@ enum {
     ACTIVATE_TYPE_LEAKY  ,
     ACTIVATE_TYPE_SIGMOID,
 };
-#define ALIGN(x, n) (((x) + ((n) - 1)) & ~((n) - 1))
 
 static char* load_file_to_buffer(char *file)
 {
@@ -233,7 +233,7 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
                         for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // rolling_mean
                         for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
                         for (j=0; j<ilayer->fn; j++) {
-                            ilayer->filter[ftsize * j + ftsize - 4] /= sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f); // scale
+                            ilayer->filter[ftsize * j + ftsize - 4] /= (float)sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f); // scale
                             ilayer->filter[ftsize * j + ftsize - 3] -= ilayer->filter[ftsize * j + ftsize - 2] * ilayer->filter[ftsize * j + ftsize - 4]; // bias
                         }
                     }
@@ -340,65 +340,13 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int scale1, int 
     return j;
 }
 
-static float activate(float x, int type)
+float activate(float x, int type)
 {
     switch (type) {
     case ACTIVATE_TYPE_RELU   : return x > 0 ? x : 0;
     case ACTIVATE_TYPE_LEAKY  : return x > 0 ? x : 0.1f * x;
     case ACTIVATE_TYPE_SIGMOID: return 1.0f / (1.0f + (float)exp(-x));
     default: return x;
-    }
-}
-
-static void im2row(float *img, int w, int h, int c, int pad, int fs, int stride, int walign, int y, float *buf)
-{
-    float *src = img + (y - pad) * w - pad, *dst = buf;
-    int    i, j, k, x;
-    for (i=0; i<c; i++) {
-        for (j=0; j<fs; j++) {
-            float *tmp = dst;
-            for (x=0; x<w; x+=stride) {
-                for (k=0; k<fs; k++) dst[k] = (unsigned)(x - pad + k) < (unsigned)w && (unsigned)(y - pad + j) < (unsigned)h ? src[k] : 0;
-                src += stride, dst += walign;
-            }
-            src += w - x, dst = tmp + fs;
-        }
-        src += w * (h - fs);
-    }
-}
-
-static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
-{
-    int    walign, ftsize, x, y, g, c, ic, oc, fn, i;
-    float *datai, *datao, *dataf, sum;
-
-    datai  = ilayer->data;
-    datao  = olayer->data;
-    dataf  = ilayer->filter;
-    ic     = ilayer->c / ilayer->groups;
-    oc     = olayer->c / ilayer->groups;
-    fn     = ilayer->fn/ ilayer->groups;
-    walign = ALIGN(ilayer->fs * ilayer->fs * ic, 4);
-    ftsize = walign + 4;
-    if (net->cnnbufsize < walign * olayer->w) {
-        net->cnnbufsize = walign * olayer->w;
-        free(net->cnntempbuf); net->cnntempbuf = malloc(net->cnnbufsize * sizeof(float));
-        if (net->cnntempbuf == NULL) { printf("failed to allocate memory for cnntempbuf !"); return; }
-    }
-
-    for (g=0; g<ilayer->groups; g++) {
-        for (y=0; y<olayer->h; y++) {
-            im2row(datai, ilayer->w, ilayer->h, ic, ilayer->pad, ilayer->fs, ilayer->stride, walign, y * ilayer->stride, net->cnntempbuf);
-            for (x=0; x<olayer->w; x++) {
-                for (c=0; c<oc; c++) {
-                    for (sum=0,i=0; i<walign; i++) sum += dataf[c * ftsize + i] * net->cnntempbuf[x * walign + i];
-                    datao[c * olayer->w * olayer->h + y * olayer->w + x] = activate(sum * dataf[c * ftsize + walign + 0] + dataf[c * ftsize + walign + 1], ilayer->activation);
-                }
-            }
-        }
-        datai += ilayer->w * ilayer->h * ic;
-        datao += olayer->w * olayer->h * oc;
-        dataf += ftsize * fn;
     }
 }
 
@@ -610,7 +558,7 @@ void net_dump(NET *net)
 
 void net_profile(NET *net) { int i; for (i=0; i<LAYER_TYPE_TOTOAL; i++) printf("%8s: %5d ms\n", get_layer_type_string(i), net->timeused[i]); }
 
-#if 1
+#if _TEST_
 #include "bmpfile.h"
 int main(int argc, char *argv[])
 {
