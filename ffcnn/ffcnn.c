@@ -233,9 +233,8 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
                         for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // rolling_mean
                         for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
                         for (j=0; j<ilayer->fn; j++) {
-                            ilayer->filter[ftsize * j + ftsize - 3] -= ilayer->filter[ftsize * j + ftsize - 2] * ilayer->filter[ftsize * j + ftsize - 4]
-                                                                     / sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f);
-                            ilayer->filter[ftsize * j + ftsize - 4] /= sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f);
+                            ilayer->filter[ftsize * j + ftsize - 4] /= sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f); // scale
+                            ilayer->filter[ftsize * j + ftsize - 3] -= ilayer->filter[ftsize * j + ftsize - 2] * ilayer->filter[ftsize * j + ftsize - 4]; // bias
                         }
                     }
                     for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j, 1, ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups) * sizeof(float), fp);
