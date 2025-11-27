@@ -1,10 +1,25 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include "utils.h"
 #include "conv.h"
 
-static void im2row(float *img, int w, int h, int c, int pad, int fs, int stride, int walign, int y, float *buf)
+static inline void im2row_pad0_fs1_stride1(float *img, int w, int h, int c, int pad, int fs, int stride, int walign, int y, float *buf) {
+    float *src = img + y * w, *dst = buf;
+    int    i, x;
+    for (i = 0; i < c; i++) {
+        float *tmp = dst;
+        for (x = 0; x < w; x += 1) {
+            dst[0] = src[0];
+            src += 1, dst += walign;
+        }
+        src += w - x, dst = tmp + 1;
+        src += w * (h - 1);
+    }
+}
+
+static inline void im2row_generic(float *img, int w, int h, int c, int pad, int fs, int stride, int walign, int y, float *buf)
 {
     float *src = img + (y - pad) * w - pad, *dst = buf;
     int    i, j, k, x;
@@ -40,7 +55,11 @@ void groupconv(float *datai, float *dataf, float *datao,
 
     for (int g = 0; g < ig; g++) {
         for (int y = 0; y < oh; y++) {
-            im2row(datai, iw, ih, gc_ic, ipad, fs, istride, walign, y * istride, *gc_buffer);
+            if (ipad == 0 && fs == 1 && istride == 1) {
+                im2row_pad0_fs1_stride1(datai, iw, ih, gc_ic, ipad, fs, istride, walign, y * istride, *gc_buffer);
+            } else {
+                im2row_generic(datai, iw, ih, gc_ic, ipad, fs, istride, walign, y * istride, *gc_buffer);
+            }
             for (int x = 0; x < ow; x++) {
                 for (int c = 0; c < gc_oc; c++) {
                     float sum = 0;

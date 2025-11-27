@@ -1,8 +1,6 @@
 #ifndef _FFCNN_H_
 #define _FFCNN_H_
 
-#define ALIGN(x, n) (((x) + ((n) - 1)) & ~((n) - 1))
-
 enum {
     LAYER_TYPE_CONV    ,
     LAYER_TYPE_AVGPOOL ,
@@ -46,8 +44,6 @@ typedef struct {
     int    cnnbufsize;
     int    timeused[LAYER_TYPE_TOTOAL];
 } NET;
-
-float activate(float x, int type);
 
 NET* net_load   (char *file1, char *file2, int inputw, int inputh);
 void net_free   (NET *net);

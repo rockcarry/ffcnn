@@ -3,6 +3,7 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
+#include "utils.h"
 #include "conv.h"
 #include "ffcnn.h"
 
@@ -31,17 +32,10 @@ static uint32_t get_tick_count()
 
 #define ENABLE_NET_PROFILE  0
 
-enum {
-    ACTIVATE_TYPE_LINEAR ,
-    ACTIVATE_TYPE_RELU   ,
-    ACTIVATE_TYPE_LEAKY  ,
-    ACTIVATE_TYPE_SIGMOID,
-};
-
 static char* load_file_to_buffer(char *file)
 {
-    FILE *fp = fopen(file, "rb");
-    char *buf= NULL;
+    FILE *fp  = fopen(file, "rb");
+    char *buf = NULL;
     int   size;
     if (!fp) return NULL;
     fseek(fp, 0, SEEK_END);
@@ -58,7 +52,7 @@ static int get_total_layers(char *str)
     static const char *LAYER_TYPE[] = { "[conv]", "[convolutional]", "[avg]", "[avgpool]", "[max]", "[maxpool]", "[upsample]", "[dropout]", "[shortcut]", "[route]", "[yolo]", NULL };
     int n = 0, i;
     while (str && (str = strstr(str, "["))) {
-        for (i=0; LAYER_TYPE[i]; i++) {
+        for (i = 0; LAYER_TYPE[i]; i++) {
             if (strstr(str, LAYER_TYPE[i]) == str) break;
         }
         if (LAYER_TYPE[i]) n++;
@@ -81,7 +75,7 @@ static char* parse_params(const char *str, const char *end, const char *key, cha
         p++;
     }
 
-    for (i=0; i<len; i++) {
+    for (i = 0; i < len; i++) {
         if (*p == '\n' || *p == '\0') break;
         val[i] = *p++;
     }
@@ -91,8 +85,8 @@ static char* parse_params(const char *str, const char *end, const char *key, cha
 
 static int get_activation_type_int(char *str)
 {
-    static const char *STR_TAB[] = { "linear", "relu", "leaky", NULL }; int  i;
-    for (i=0; STR_TAB[i]; i++) {
+    static const char *STR_TAB[] = { "linear", "relu", "leaky", NULL }; int i;
+    for (i = 0; STR_TAB[i]; i++) {
         if (strstr(str, STR_TAB[i]) == str) return i;
     }
     return -1;
@@ -180,7 +174,7 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
         } else if (strstr(pstart, "[route]") == pstart) {
             char *str; int dep = 0;
             parse_params(pstart, pend, "layers", strval, sizeof(strval));
-            for (i=0; i<4 && (str = strtok(i ? NULL : strval, ",")); i++) {
+            for (i = 0; i < 4 && (str = strtok(i ? NULL : strval, ",")); i++) {
                 dep = atoi(str);
                 dep = dep > 0 ? dep : layercur + dep;
                 ilayer->depend_list[i] = dep;
@@ -196,14 +190,14 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
             parse_params(pstart, pend, "scale_x_y"    , strval, sizeof(strval)); ilayer->scale_x_y   = (strcmp(strval, "") == 0) ? 1.0f : (float)atof(strval);
             parse_params(pstart, pend, "ignore_thresh", strval, sizeof(strval)); ilayer->ignore_thres= (float)atof(strval);
             parse_params(pstart, pend, "mask", strval, sizeof(strval));
-            for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) masks[i] = atoi(str);
+            for (i = 0; i < 9 && (str = strtok(i ? NULL : strval, ",")); i++) masks[i] = atoi(str);
             parse_params(pstart, pend, "anchors", strval, sizeof(strval));
-            for (i=0; i<9 && (str = strtok(i ? NULL : strval, ",")); i++) {
+            for (i = 0; i < 9 && (str = strtok(i ? NULL : strval, ",")); i++) {
                 anchors[i][0] = atoi(str);
                 str = strtok(NULL, ",");
                 anchors[i][1] = atoi(str);
             }
-            for (i=0; i<3; i++) {
+            for (i = 0; i < 3; i++) {
                 ilayer->anchor_list[i][0] = anchors[masks[i]][0];
                 ilayer->anchor_list[i][1] = anchors[masks[i]][1];
             }
@@ -218,26 +212,26 @@ NET* net_load(char *fcfg, char *fweights, int inputw, int inputh)
     if (net->weight_buf) {
         float *pfloat = net->weight_buf; FILE *fp = fopen(fweights, "rb");
         if (fp) fseek(fp, sizeof(WEIGHTS_FILE_HEADER), SEEK_SET);
-        for (i=0; i<layers; i++) {
+        for (i = 0; i<layers; i++) {
             if (net->layer_list[i].type == LAYER_TYPE_CONV) {
                 ilayer = net->layer_list + i;
                 ftsize = ALIGN(ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups), 4) + 4;
                 ilayer->filter = pfloat; pfloat += ilayer->fn * ftsize;
                 if (fp) {
-                    for (j=0; j<ilayer->fn; j++) {
+                    for (j = 0; j<ilayer->fn; j++) {
                         ilayer->filter[ftsize * j + ftsize - 4] = 1.0; // scale
                         ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 3, 1, sizeof(float), fp); // bias
                     }
                     if (ilayer->batchnorm) {
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // scale
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // rolling_mean
-                        for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
-                        for (j=0; j<ilayer->fn; j++) {
+                        for (j = 0; j < ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 4, 1, sizeof(float), fp); // scale
+                        for (j = 0; j < ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 2, 1, sizeof(float), fp); // rolling_mean
+                        for (j = 0; j < ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j + ftsize - 1, 1, sizeof(float), fp); // rolling_variance
+                        for (j = 0; j < ilayer->fn; j++) {
                             ilayer->filter[ftsize * j + ftsize - 4] /= (float)sqrt(ilayer->filter[ftsize * j + ftsize - 1] + 0.00001f); // scale
                             ilayer->filter[ftsize * j + ftsize - 3] -= ilayer->filter[ftsize * j + ftsize - 2] * ilayer->filter[ftsize * j + ftsize - 4]; // bias
                         }
                     }
-                    for (j=0; j<ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j, 1, ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups) * sizeof(float), fp);
+                    for (j = 0; j < ilayer->fn; j++) ret = (int)fread(ilayer->filter + ftsize * j, 1, ilayer->fs * ilayer->fs * (ilayer->c / ilayer->groups) * sizeof(float), fp);
                 }
             }
         }
@@ -256,7 +250,7 @@ void net_free(NET *net)
 {
     int  i;
     if (!net) return;
-    for (i=0; i<net->layer_num+1; i++) free(net->layer_list[i].data);
+    for (i = 0; i < net->layer_num + 1; i++) free(net->layer_list[i].data);
     free(net->cnntempbuf);
     free(net->weight_buf);
     free(net);
@@ -281,8 +275,8 @@ void net_input(NET *net, unsigned char *bgr, int w, int h, float *mean, float *n
     p1 = ilayer->data + ilayer->w * ilayer->h * 0;
     p2 = ilayer->data + ilayer->w * ilayer->h * 1;
     p3 = ilayer->data + ilayer->w * ilayer->h * 2;
-    for (i=0; i<sh; i++) {
-        for (j=0; j<sw; j++) {
+    for (i = 0; i < sh; i++) {
+        for (j = 0; j < sw; j++) {
             int x = j * net->s1 / net->s2, y = i * net->s1 / net->s2, k = y * linebytes + x * 3;
             *p1++ = (bgr[k + 2] - mean[0]) * norm[0]; // r
             *p2++ = (bgr[k + 1] - mean[1]) * norm[1]; // g
@@ -306,8 +300,8 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int scale1, int 
     int i, j, c;
     if (!bboxlist || !n) return 0;
     qsort(bboxlist, n, sizeof(BBOX), bbox_cmp);
-    for (i=0; i<n && i!=-1; ) {
-        for (c=i,j=i+1,i=-1; j<n; j++) {
+    for (i = 0; i < n && i != -1; ) {
+        for (c = i, j = i + 1, i = -1; j < n; j++) {
             if (bboxlist[j].score == 0) continue;
             if (bboxlist[c].type == bboxlist[j].type) {
                 float xc1, yc1, xc2, yc2, sc, s1, s2, ss, iou;
@@ -326,7 +320,7 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int scale1, int 
             } else if (i == -1) i = j;
         }
     }
-    for (i=0,j=0; i<n; i++) {
+    for (i = 0, j = 0; i < n; i++) {
         if (bboxlist[i].score) {
             bboxlist[j  ].score= bboxlist[i].score;
             bboxlist[j  ].type = bboxlist[i].type;
@@ -340,16 +334,6 @@ static int nms(BBOX *bboxlist, int n, float threshold, int min, int scale1, int 
     return j;
 }
 
-float activate(float x, int type)
-{
-    switch (type) {
-    case ACTIVATE_TYPE_RELU   : return x > 0 ? x : 0;
-    case ACTIVATE_TYPE_LEAKY  : return x > 0 ? x : 0.1f * x;
-    case ACTIVATE_TYPE_SIGMOID: return 1.0f / (1.0f + (float)exp(-x));
-    default: return x;
-    }
-}
-
 static float filter_avgpool(float *mat, int mw, int mh, int x, int y, int fsize)
 {
     int xmin, ymin, xmax, ymax; float val = 0;
@@ -361,8 +345,8 @@ static float filter_avgpool(float *mat, int mw, int mh, int x, int y, int fsize)
     if (ymin < 0 ) ymin = 0;
     if (xmax > mw) xmax = mw;
     if (ymax > mh) ymax = mh;
-    for (y=ymin; y<ymax; y++) {
-        for (x=xmin; x<xmax; x++) val += mat[y * mw + x];
+    for (y = ymin; y < ymax; y++) {
+        for (x = xmin; x < xmax; x++) val += mat[y * mw + x];
     }
     return val / (fsize * fsize);
 }
@@ -379,12 +363,19 @@ static float filter_maxpool(float *mat, int mw, int mh, int x, int y, int fsize)
     if (xmax > mw) xmax = mw;
     if (ymax > mh) ymax = mh;
     val = mat[ymin * mw + xmin];
-    for (y=ymin; y<ymax; y++) {
-        for (x=xmin; x<xmax; x++) {
+    for (y = ymin; y<ymax; y++) {
+        for (x = xmin; x < xmax; x++) {
             if (val < mat[y * mw + x]) val = mat[y * mw + x];
         }
     }
     return val;
+}
+
+static void layer_groupconv_forward(NET *net, LAYER *ilayer, LAYER *olayer)
+{
+    groupconv(ilayer->data, ilayer->filter, olayer->data,
+              ilayer->w, ilayer->h, ilayer->c, ilayer->groups, ilayer->pad, ilayer->stride,
+              ilayer->fs, ilayer->fn, olayer->w, olayer->h, olayer->c, ilayer->activation, &net->cnntempbuf, &net->cnnbufsize);
 }
 
 static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
@@ -392,9 +383,9 @@ static void layer_avgmaxpool_forward(LAYER *ilayer, LAYER *olayer, int flag)
     int ix, iy, ox, oy, i;
     float *datai = ilayer->data;
     float *datao = olayer->data;
-    for (i=0; i<ilayer->c; i++) {
-        for (iy=0,oy=0; iy<ilayer->h; iy+=ilayer->stride,oy++) {
-            for (ix=0,ox=0; ix<ilayer->w; ix+=ilayer->stride,ox++) {
+    for (i = 0; i < ilayer->c; i++) {
+        for (iy = 0, oy = 0; iy < ilayer->h; iy += ilayer->stride, oy++) {
+            for (ix = 0, ox = 0; ix < ilayer->w; ix += ilayer->stride, ox++) {
                 *datao++ = (flag ? filter_maxpool : filter_avgpool)(datai, ilayer->w, ilayer->h, ix, iy, ilayer->fs);
             }
         }
@@ -407,9 +398,9 @@ static void layer_upsample_forward(LAYER *ilayer, LAYER *olayer)
     float *datai = ilayer->data;
     float *datao = olayer->data;
     int    i, x, y;
-    for (i=0; i<olayer->c; i++) {
-        for (y=0; y<olayer->h;) {
-            for (x=0; x<olayer->w;) {
+    for (i = 0; i < olayer->c; i++) {
+        for (y = 0; y < olayer->h;) {
+            for (x = 0; x < olayer->w;) {
                 *datao++ = *datai;
                 if (++x % ilayer->stride == 0) datai++;
             }
@@ -428,13 +419,13 @@ static void layer_shortcut_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     LAYER *slayer = net->layer_list + ilayer->depend_list[0] + 1;
     int    n = olayer->w * olayer->h * olayer->c, i;
-    for (i=0; i<n; i++) olayer->data[i] = activate(ilayer->data[i] + slayer->data[i], ilayer->activation);
+    for (i = 0; i < n; i++) olayer->data[i] = activate(ilayer->data[i] + slayer->data[i], ilayer->activation);
 }
 
 static void layer_route_forward(NET *net, LAYER *ilayer, LAYER *olayer)
 {
     float *datao = olayer->data; int i;
-    for (i=0; i<ilayer->depend_num; i++) {
+    for (i = 0; i < ilayer->depend_num; i++) {
         LAYER *rlayer = net->layer_list + ilayer->depend_list[i] + 1;
         int    n      = rlayer->w * rlayer->h * rlayer->c;
         memcpy(datao, rlayer->data, n * sizeof(float));
@@ -447,13 +438,13 @@ static float get_layer_data(LAYER *layer, int x, int y, int i) { return layer->d
 static void layer_yolo_forward(NET *net, LAYER *ilayer)
 {
     int i, j, k, l; float confidence;
-    for (i=0; i<ilayer->h; i++) {
-        for (j=0; j<ilayer->w; j++) {
-            for (k=0; k<3; k++) {
+    for (i = 0; i < ilayer->h; i++) {
+        for (j = 0; j < ilayer->w; j++) {
+            for (k = 0; k < 3; k++) {
                 int dstart = k * (4 + 1 + ilayer->class_num), cindex = 0;
                 float bs = get_layer_data(ilayer, j, i, dstart + 4);
                 float cs = get_layer_data(ilayer, j, i, dstart + 5);
-                for (l=1; l<ilayer->class_num; l++) {
+                for (l = 1; l < ilayer->class_num; l++) {
                     float val = get_layer_data(ilayer, j, i, dstart + 5 + l);
                     if (cs < val) { cs = val; cindex = l; }
                 }
@@ -487,14 +478,14 @@ void net_forward(NET *net)
     LAYER *ilayer = net->layer_list, *olayer = net->layer_list + 1; uint32_t tick; int i, j;
     if (!net) return;
     (void)tick;
-    for (i=0; i<net->layer_num; i++) {
+    for (i = 0; i < net->layer_num; i++) {
         if (net->layer_list[i].depend_num > 0) {
-            for (j=0; j<net->layer_list[i].depend_num; j++) {
+            for (j = 0; j < net->layer_list[i].depend_num; j++) {
                 net->layer_list[net->layer_list[i].depend_list[j] + 1].refcnt++;
             }
         }
     }
-    for (i=0; i<net->layer_num; i++,ilayer++,olayer++) {
+    for (i = 0; i < net->layer_num; i++, ilayer++, olayer++) {
         if (!olayer->data && ilayer->type != LAYER_TYPE_DROPOUT && ilayer->type != LAYER_TYPE_YOLO) {
             olayer->data = malloc(olayer->w * olayer->h * olayer->c * sizeof(float));
             if (!olayer->data) { printf("failed to allocate memory for output layer !\n"); return; }
@@ -518,7 +509,7 @@ void net_forward(NET *net)
         net->timeused[ilayer->type] += tick;
 #endif
         if (i > 0 && ilayer->refcnt == 0) { free(ilayer->data); ilayer->data = NULL; }
-        for (j=0; j<ilayer->depend_num; j++) {
+        for (j = 0; j < ilayer->depend_num; j++) {
             if (--net->layer_list[ilayer->depend_list[j] + 1].refcnt == 0) {
                 free(net->layer_list[ilayer->depend_list[j] + 1].data);
                 net->layer_list[ilayer->depend_list[j] + 1].data = NULL;
@@ -533,7 +524,7 @@ void net_dump(NET *net)
     LAYER *ilayer, *olayer; int i, j;
     if (!net) return;
     printf("layer   type  filters fltsize  pad/strd input          output       bn/act\n");
-    for (i=0; i<net->layer_num; i++) {
+    for (i = 0; i < net->layer_num; i++) {
         ilayer = net->layer_list + i + 0;
         olayer = net->layer_list + i + 1;
         if (ilayer->type == LAYER_TYPE_YOLO) {
@@ -543,7 +534,7 @@ void net_dump(NET *net)
             printf("%3d %8s %-38s -> %3dx%3dx%3d\n", i, get_layer_type_string(ilayer->type), "", olayer->w, olayer->h, olayer->c);
         } else if (ilayer->type == LAYER_TYPE_SHORTCUT || ilayer->type == LAYER_TYPE_ROUTE) {
             char strdeps[256] = "layers:", strnum[16];
-            for (j=0; j<ilayer->depend_num; j++) {
+            for (j = 0; j < ilayer->depend_num; j++) {
                 snprintf(strnum, sizeof(strnum), " %d", ilayer->depend_list[j]);
                 strncat(strdeps, strnum, sizeof(strdeps) - 1);
             }
@@ -556,7 +547,7 @@ void net_dump(NET *net)
     }
 }
 
-void net_profile(NET *net) { int i; for (i=0; i<LAYER_TYPE_TOTOAL; i++) printf("%8s: %5d ms\n", get_layer_type_string(i), net->timeused[i]); }
+void net_profile(NET *net) { int i; for (i = 0; i < LAYER_TYPE_TOTOAL; i++) printf("%8s: %5d ms\n", get_layer_type_string(i), net->timeused[i]); }
 
 #if _TEST_
 #include "bmpfile.h"
@@ -583,13 +574,13 @@ int main(int argc, char *argv[])
     mynet = net_load(file_cfg, file_weights, mybmp.width, mybmp.height);
     net_dump(mynet);
     tick = (int)get_tick_count();
-    for (i=0; i<n; i++) {
+    for (i = 0; i < n; i++) {
         net_input  (mynet, mybmp.pdata, mybmp.width, mybmp.height, (float*)MEAN, (float*)NORM);
         net_forward(mynet);
     }
     printf("%d times inference: %d ms\n", n, (int)get_tick_count() - (int)tick);
     net_profile(mynet);
-    for (i=0; i<mynet->bbox_num; i++) {
+    for (i = 0; i < mynet->bbox_num; i++) {
         printf("score: %.2f, category: %2d, rect: (%3d %3d %3d %3d)\n", mynet->bbox_list[i].score, mynet->bbox_list[i].type,
             (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2);
         bmp_rectangle(&mybmp, (int)mynet->bbox_list[i].x1, (int)mynet->bbox_list[i].y1, (int)mynet->bbox_list[i].x2, (int)mynet->bbox_list[i].y2, 0, 255, 0);

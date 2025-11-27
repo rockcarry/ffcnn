@@ -3,7 +3,7 @@
 CONV_TYPE=v1
 
 case "$1" in
-v0|v1)
+v0|v1|v2|v3)
     CONV_TYPE=$1
     ;;
 esac
