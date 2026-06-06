@@ -1,4 +1,4 @@
-#include <stdlib.h>
+ï»¿#include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include "utils.h"
@@ -43,12 +43,12 @@ void groupconv(float *datai, float *dataf, float *datao,
     int walign = ALIGN(fs * fs * gc_ic, 4);
     int ftsize = walign + 4;
 
-    // ¼ÆËã im2col ºó¾ØÕóµÄ´óĞ¡
+    // è®¡ç®— im2col åçŸ©é˜µçš„å¤§å°
     int col_height = gc_ic * fs * fs;
     int col_width  = ow * oh;
     int col_size   = col_height * (col_width + gc_oc);
 
-    // ·ÖÅäÄÚ´æÓÃÓÚ´æ´¢ im2col ½á¹û
+    // åˆ†é…å†…å­˜ç”¨äºå­˜å‚¨ im2col ç»“æœ
     if (*gc_bufsize < col_size) {
         *gc_bufsize = col_size;
         free(*gc_buffer); *gc_buffer = malloc(*gc_bufsize * sizeof(float));
@@ -56,10 +56,10 @@ void groupconv(float *datai, float *dataf, float *datao,
     }
 
     for (int g = 0; g < ig; g++) {
-        // ¶Ôµ±Ç°×éµÄÊäÈëÊı¾İ½øĞĞ im2col ×ª»»
+        // å¯¹å½“å‰ç»„çš„è¾“å…¥æ•°æ®è¿›è¡Œ im2col è½¬æ¢
         im2col(datai, gc_ic, ih, iw, fs, fs, ipad, istride, *gc_buffer);
 
-        // ÖØ×éÂË²¨Æ÷È¨ÖØ
+        // é‡ç»„æ»¤æ³¢å™¨æƒé‡
         float *weight_matrix = *gc_buffer + col_height * col_width;;
         for (int c = 0; c < gc_oc; c++) {
             for (int i = 0; i < gc_ic; i++) {
@@ -73,20 +73,20 @@ void groupconv(float *datai, float *dataf, float *datao,
             }
         }
 
-        // Ö´ĞĞ¾ØÕó³Ë·¨: output = col_matrix * weight_matrix^T
+        // æ‰§è¡ŒçŸ©é˜µä¹˜æ³•: output = col_matrix * weight_matrix^T
         for (int n = 0; n < col_width; n++) {
             for (int c = 0; c < gc_oc; c++) {
                 float sum = 0;
                 for (int h = 0; h < col_height; h++) {
                     sum += (*gc_buffer)[h * col_width + n] * weight_matrix[c * col_height + h];
                 }
-                // Ìí¼ÓÆ«ÖÃ²¢Ó¦ÓÃ¼¤»îº¯Êı
+                // æ·»åŠ åç½®å¹¶åº”ç”¨æ¿€æ´»å‡½æ•°
                 int bias_idx = c * ftsize + walign;
                 datao[c * ow * oh + n] = activate(sum * dataf[bias_idx] + dataf[bias_idx + 1], activation);
             }
         }
 
-        // ÒÆ¶¯µ½ÏÂÒ»×é
+        // ç§»åŠ¨åˆ°ä¸‹ä¸€ç»„
         datai += iw * ih * gc_ic;
         datao += ow * oh * gc_oc;
         dataf += ftsize * gc_fn;

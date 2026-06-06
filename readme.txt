@@ -112,25 +112,23 @@ ffcnn vs ncnn 性能评测
 ----------------------
 
 测试环境：
-1. Intel(R) Core(TM) i5-4250U CPU @ 1.30GHz 1.90GHZ, 8GB RAM
-2. win7 64bit 操作系统 + msys2 + mingw32 + gcc version 10.3.0
+1. 11th Gen Intel(R) Core(TM) i5-1155G7 @ 2.50GHz, 16GB DDR RAM
+2. win11 64bit 操作系统 + wsl + gcc version 9.4.0
 3. ffcnn + yolo-fastest 代码：https://github.com/rockcarry/ffcnn
 4. ncnn  + yolo-fastest 代码：https://github.com/rockcarry/ffyolodet
 5. 测试图片 test.bmp 100 次推理
 
 测试结果：
 +----------+--------------+-------------------+------------------+
-| 测试项目 | ffcnn-v1.2.0 | ncnn with avx off | ncnn with avx on |
+| 测试项目 | ffcnn-v1.6.0 | ncnn with avx off | ncnn with avx on |
 +----------+--------------+-------------------+------------------+
-| 耗    时 | 14555ms      | 14649 ms          | 8424 ms          |
+| 耗    时 | 6749 ms      | 3230 ms           | 1833 ms          |
 +----------+--------------+-------------------+------------------+
 | 内存占用 | 5MB          | 41MB              | 41MB             |
 +----------+--------------+-------------------+------------------+
 | 程序体积 | 68KB         | 1.2MB             | 1.2MB            |
 +----------+--------------+-------------------+------------------+
-
-可以看到 ffcnn 已经逼近 ncnn（不开启 avx 指令优化）的性能
-
+（距离 ncnn 还有差距）
 
 rockcarry@163.com
 20:22 2021/8/7
